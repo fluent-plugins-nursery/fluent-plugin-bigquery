@@ -1,4 +1,4 @@
-# fluent-plugin-webhdfs
+# fluent-plugin-bigquery
 
 Fluentd output plugin to load/insert data into Google BigQuery.
 
