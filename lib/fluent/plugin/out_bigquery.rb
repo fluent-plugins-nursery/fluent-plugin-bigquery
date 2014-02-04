@@ -39,9 +39,14 @@ module Fluent
     # config_param :client_id, :string
     # config_param :client_secret, :string
 
+    # Available methods are:
+    # * private_key -- Use service account credential
+    # * compute_engine -- Use access token available in instances of ComputeEngine
+    config_param :auth_method, :string, :default => 'private_key'
+
     ### Service Account credential
-    config_param :email, :string
-    config_param :private_key_path, :string
+    config_param :email, :string, :default => nil
+    config_param :private_key_path, :string, :default => nil
     config_param :private_key_passphrase, :string, :default => 'notasecret'
 
     # see as simple reference
@@ -113,12 +118,28 @@ module Fluent
     def initialize
       super
       require 'google/api_client'
-      require 'google/api_client/client_secrets'
-      require 'google/api_client/auth/installed_app'
+      case @auth_method
+      when 'private_key'
+        require 'google/api_client/client_secrets'
+        require 'google/api_client/auth/installed_app'
+      when 'compute_engine'
+        require 'google/api_client/auth/compute_service_account'
+      end
     end
 
     def configure(conf)
       super
+
+      case @auth_method
+      when 'private_key'
+        if !@email || !@private_key_path
+          raise Fluent::ConfigError, "'email' and 'private_key_path' must be specified if auth_method == 'private_key'"
+        end
+      when 'compute_engine'
+        # Do nothing
+      else
+        raise Fluent::ConfigError, "unrecognized 'auth_method': #{@auth_method}"
+      end
 
       if (!@table && !@tables) || (@table && @table)
         raise Fluent::ConfigError, "'table' or 'tables' must be specified, and both are invalid"
@@ -180,14 +201,26 @@ module Fluent
         :application_version => Fluent::BigQueryPlugin::VERSION
       )
 
-      key = Google::APIClient::PKCS12.load_key( @private_key_path, @private_key_passphrase )
-      asserter = Google::APIClient::JWTAsserter.new(
-        @email,
-        "https://www.googleapis.com/auth/bigquery",
-        key
-      )
-      # refresh_auth
-      client.authorization = asserter.authorize
+      case @auth_method
+      when 'private_key'
+        key = Google::APIClient::PKCS12.load_key( @private_key_path, @private_key_passphrase )
+        asserter = Google::APIClient::JWTAsserter.new(
+          @email,
+          "https://www.googleapis.com/auth/bigquery",
+          key
+        )
+        # refresh_auth
+        client.authorization = asserter.authorize
+
+      when 'compute_engine'
+        auth = Google::APIClient::ComputeServiceAccount.new
+        auth.fetch_access_token!
+        client.authorization = auth
+
+      else
+        raise ConfigError, "Unknown auth method: #{@auth_method}"
+      end
+
       @cached_client_expiration = Time.now + 1800
       @cached_client = client
     end
