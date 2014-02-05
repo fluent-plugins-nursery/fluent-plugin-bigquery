@@ -63,6 +63,7 @@ module Fluent
     config_param :table, :string, :default => nil
     config_param :tables, :string, :default => nil
 
+    config_param :schema_path, :string, :default => nil
     config_param :field_string,  :string, :default => nil
     config_param :field_integer, :string, :default => nil
     config_param :field_float,   :string, :default => nil
@@ -117,6 +118,7 @@ module Fluent
 
     def initialize
       super
+      require 'json'
       require 'google/api_client'
       require 'google/api_client/client_secrets'
       require 'google/api_client/auth/installed_app'
@@ -144,6 +146,9 @@ module Fluent
       @tablelist = @tables ? @tables.split(',') : [@table]
 
       @fields = RecordSchema.new
+      if @schema_path
+        @fields.load_schema(JSON.parse(File.read(@schema_path)))
+      end
       if @field_string
         @field_string.split(',').each do |fieldname|
           @fields.register_field fieldname, :string
@@ -357,12 +362,24 @@ module Fluent
       end
     end
 
+    class TimestampFieldSchema < FieldSchema
+      def type
+        :timestamp
+      end
+
+      def format(value)
+        value
+      end
+    end
+
     class RecordSchema < FieldSchema
       FIELD_TYPES = {
         :string => StringFieldSchema,
         :integer => IntegerFieldSchema,
         :float => FloatFieldSchema,
-        :boolean => BooleanFieldSchema
+        :boolean => BooleanFieldSchema,
+        :timestamp => TimestampFieldSchema,
+        :record => RecordSchema
       }.freeze
 
       def initialize
@@ -377,8 +394,27 @@ module Fluent
         @fields[name]
       end
 
+      def load_schema(schema)
+        schema.each do |field|
+          raise ConfigError, 'field must have type' unless field.key?('type')
+
+          type = field['type'].downcase.to_sym
+          field_schema_class = FIELD_TYPES[type]
+          raise ConfigError, "Invalid field type: #{field['type']}" unless field_schema_class
+
+          field_schema = field_schema_class.new
+          @fields[field['name']] = field_schema
+          if type == :record
+            raise ConfigError, "record field must have fields" unless field.key?('fields')
+            field_schema.load_schema(field['fields'])
+          end
+        end
+      end
+
       def register_field(name, type)
-        raise ConfigError, "field #{name} is registered twice" if @fields.key?(name)
+        if @fields.key?(name) and @fields[name].type != :timestamp
+          raise ConfigError, "field #{name} is registered twice"
+        end
         if name[/\./]
           recordname = $`
           fieldname = $'

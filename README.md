@@ -104,6 +104,7 @@ Important options for high rate events are:
 ### Authentication
 
 There are two methods supported to fetch access token for the service account.
+
 1. Public-Private key pair
 2. Predefined access token (Compute Engine only)
 
@@ -134,6 +135,73 @@ Compute Engine instance, then you can configure fluentd like this.
   field_boolean bot_access,loginsession
 </match>
 ```
+
+### Table schema
+
+There are two methods to describe the schema of the target table.
+
+1. List fields in fluent.conf
+2. Load a schema file in JSON.
+
+The examples above use the first method.  In this method,
+you can also specify nested fields by prefixing their belonging record fields.
+
+```apache
+<match dummy>
+  type bigquery
+
+  ...
+  
+  time_format %s
+  time_field  time
+
+  field_integer time,response.status,response.bytes
+  field_string  request.vhost,request.path,request.method,request.protocol,request.agent,request.referer,remote.host,remote.ip,remote.user
+  field_float   request.time
+  field_boolean request.bot_access,request.loginsession
+</match>
+```
+
+This schema accepts structured JSON data like:
+
+```json
+{
+  "request":{
+    "time":1391748126.7000976,
+    "vhost":"www.example.com",
+    "path":"/",
+    "method":"GET",
+    "protocol":"HTTP/1.1",
+    "agent":"HotJava",
+    "bot_access":false
+  },
+  "remote":{ "ip": "192.0.2.1" },
+  "response":{
+    "status":200,
+    "bytes":1024
+  }
+}
+```
+
+The second method is to specify a path to a BigQuery schema file instead of listing fields.  In this case, your fluent.conf looks like:
+
+```apache
+<match dummy>
+  type bigquery
+
+  ...
+
+  time_format %s
+  time_field  time
+
+  schema_path /path/to/httpd.schema
+  field_integer time
+</match>
+```
+where /path/to/httpd.schema is a path to the JSON-encoded schema file which you used for creating the table on BigQuery.
+
+NOTE: Since JSON does not define how to encode data of TIMESTAMP type,
+you are still recommended to specify JSON types for TIMESTAMP fields as "time" field does in the example.
 
 
 ### patches

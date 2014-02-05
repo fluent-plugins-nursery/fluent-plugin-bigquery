@@ -1,0 +1,98 @@
+[
+  {
+    "name": "time",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED"
+  },
+  {
+    "name": "request",
+    "type": "RECORD",
+    "mode": "REQUIRED",
+    "fields": [
+      {
+        "name": "vhost",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "path",
+        "type": "STRING",
+        "mode": "REQUIRED"
+      },
+      {
+        "name": "method",
+        "type": "STRING",
+        "mode": "REQUIRED"
+      },
+      {
+        "name": "protocol",
+        "type": "STRING",
+        "mode": "REQUIRED"
+      },
+      {
+        "name": "agent",
+        "type": "STRING",
+        "mode": "REQUIRED"
+      },
+      {
+        "name": "referer",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "time",
+        "type": "TIMESTAMP",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "bot_access",
+        "type": "BOOLEAN",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "loginsession",
+        "type": "BOOLEAN",
+        "mode": "NULLABLE"
+      }
+    ]
+  },
+  {
+    "name": "remote",
+    "type": "RECORD",
+    "mode": "NULLABLE",
+    "fields": [
+      {
+        "name": "host",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "ip",
+        "type": "STRING",
+        "mode": "REQUIRED"
+      },
+      {
+        "name": "user",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      }
+    ]
+  },
+  {
+    "name": "response",
+    "type": "RECORD",
+    "mode": "REQUIRED",
+    "fields": [
+      {
+        "name": "status",
+        "type": "INTEGER",
+        "mode": "REQUIRED"
+      },
+      {
+        "name": "bytes",
+        "type": "INTEGER",
+        "mode": "REQUIRED"
+      }
+    ]
+  }
+]

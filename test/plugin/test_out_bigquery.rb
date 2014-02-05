@@ -225,6 +225,88 @@ class BigQueryOutputTest < Test::Unit::TestCase
     assert_equal expected, MessagePack.unpack(buf)
   end
 
+  def test_format_with_schema
+    now = Time.now
+    input = [
+      now,
+      {
+        "request" => {
+          "vhost" => :bar,
+          "path" => "/path/to/baz",
+          "method" => "GET",
+          "protocol" => "HTTP/0.9",
+          "agent" => "libwww",
+          "referer" => "http://referer.example",
+          "time" => (now - 1).to_f,
+          "bot_access" => true,
+          "loginsession" => false,
+        },
+        "response" => {
+          "status" => "1",
+          "bytes" => 3.0,
+        },
+        "remote" => {
+          "host" => "remote.example",
+          "ip" =>  "192.0.2.1",
+          "port" => 12345,
+          "user" => "tagomoris",
+        },
+        "something-else" => "would be ignored",
+        "yet-another" => {
+          "foo" => "bar",
+          "baz" => 1,
+        },
+      }
+    ]
+    expected = {
+      "json" => {
+        "time" => now.to_i,
+        "request" => {
+          "vhost" => "bar",
+          "path" => "/path/to/baz",
+          "method" => "GET",
+          "protocol" => "HTTP/0.9",
+          "agent" => "libwww",
+          "referer" => "http://referer.example",
+          "time" => (now - 1).to_f,
+          "bot_access" => true,
+          "loginsession" => false,
+        },
+        "remote" => {
+          "host" => "remote.example",
+          "ip" =>  "192.0.2.1",
+          "user" => "tagomoris",
+        },
+        "response" => {
+          "status" => 1,
+          "bytes" => 3,
+        },
+      }
+    }
+
+    driver = create_driver(<<-CONFIG)
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      time_format %s
+      time_field  time
+
+      schema_path #{File.join(File.dirname(__FILE__), "testdata", "apache.schema")}
+      field_integer time
+    CONFIG
+    mock_client(driver) do |expect|
+      expect.discovered_api("bigquery", "v2") { stub! }
+    end
+    driver.instance.start
+    buf = driver.instance.format_stream("my.tag", [input])
+    driver.instance.shutdown
+
+    assert_equal expected, MessagePack.unpack(buf)
+  end
+
   def test_write
     entry = {"json" => {"a" => "b"}}, {"json" => {"b" => "c"}}
     driver = create_driver(CONFIG)
