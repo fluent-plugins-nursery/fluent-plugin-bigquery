@@ -118,13 +118,9 @@ module Fluent
     def initialize
       super
       require 'google/api_client'
-      case @auth_method
-      when 'private_key'
-        require 'google/api_client/client_secrets'
-        require 'google/api_client/auth/installed_app'
-      when 'compute_engine'
-        require 'google/api_client/auth/compute_service_account'
-      end
+      require 'google/api_client/client_secrets'
+      require 'google/api_client/auth/installed_app'
+      require 'google/api_client/auth/compute_service_account'
     end
 
     def configure(conf)
