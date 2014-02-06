@@ -137,7 +137,7 @@ module Fluent
         raise Fluent::ConfigError, "unrecognized 'auth_method': #{@auth_method}"
       end
 
-      if (!@table && !@tables) || (@table && @table)
+      if (!@table && !@tables) || (@table && @tables)
         raise Fluent::ConfigError, "'table' or 'tables' must be specified, and both are invalid"
       end
 
