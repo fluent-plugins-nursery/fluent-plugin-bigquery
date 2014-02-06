@@ -19,7 +19,7 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   spec.add_development_dependency "rake"
-  spec.add_runtime_dependency "google-api-client", "~> 0.6.4"
+  spec.add_runtime_dependency "google-api-client", "~> 0.7.1"
   spec.add_runtime_dependency "fluentd"
   spec.add_runtime_dependency "fluent-mixin-plaintextformatter", '>= 0.2.1'
   spec.add_runtime_dependency "fluent-mixin-config-placeholders", ">= 0.2.0"
