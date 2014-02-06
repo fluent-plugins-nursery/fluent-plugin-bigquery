@@ -9,13 +9,12 @@ Fluentd output plugin to load/insert data into Google BigQuery.
   * for data loading as batch jobs, for big amount of data
   * https://developers.google.com/bigquery/loading-data-into-bigquery
   
-Current version of this plugin supports Google API with Service Account Authentication, and does not support OAuth.
+Current version of this plugin supports Google API with Service Account Authentication, but does not support
+OAuth flow for installed applications.
 
 ## Configuration
 
 ### Streming inserts
-
-For service account authentication, generate service account private key file and email key, then upload private key file onto your server.
 
 Configure insert specifications with target table schema, with your credentials. This is minimum configurations:
 
@@ -25,6 +24,7 @@ Configure insert specifications with target table schema, with your credentials.
   
   method insert    # default
   
+  auth_method private_key   # default
   email xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxx@developer.gserviceaccount.com
   private_key_path /home/username/.keys/00000000000000000000000000000000-privatekey.p12
   # private_key_passphrase notasecret # default
@@ -58,6 +58,7 @@ For high rate inserts over streaming inserts, you should specify flush intervals
   
   num_threads 16
   
+  auth_method private_key   # default
   email xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxx@developer.gserviceaccount.com
   private_key_path /home/username/.keys/00000000000000000000000000000000-privatekey.p12
   # private_key_passphrase notasecret # default
@@ -99,6 +100,41 @@ Important options for high rate events are:
   * `flush_interval`
     * `1` is lowest value, without patches on Fluentd v0.10.41 or earlier
     * see `patches` below
+
+### Authentication
+
+There are two methods supported to fetch access token for the service account.
+1. Public-Private key pair
+2. Predefined access token (Compute Engine only)
+
+The examples above use the first one.  You first need to create a service account (client ID),
+download its private key and deploy the key with fluentd.
+
+On the other hand, you don't need to explicitly create a service account for fluentd when you
+run fluentd in Google Compute Engine.  In this second authentication method, you need to
+add the API scope "https://www.googleapis.com/auth/bigquery" to the scope list of your
+Compute Engine instance, then you can configure fluentd like this.
+
+```apache
+<match dummy>
+  type bigquery
+  
+  auth_method compute_engine
+  
+  project yourproject_id
+  dataset yourdataset_id
+  table   tablename
+  
+  time_format %s
+  time_field  time
+  
+  field_integer time,status,bytes
+  field_string  rhost,vhost,path,method,protocol,agent,referer
+  field_float   requestime
+  field_boolean bot_access,loginsession
+</match>
+```
+
 
 ### patches
 
