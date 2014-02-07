@@ -183,6 +183,48 @@ class BigQueryOutputTest < Test::Unit::TestCase
     end
   end
 
+  def test_format_nested_time
+    now = Time.now
+    input = [
+      now,
+      {
+        "metadata" => {
+          "node" => "mynode.example",
+        },
+        "log" => "something",
+      }
+    ]
+    expected = {
+      "json" => {
+        "metadata" => {
+          "time" => now.strftime("%s").to_i,
+          "node" => "mynode.example",
+        },
+        "log" => "something",
+      }
+    }
+
+    driver = create_driver(<<-CONFIG)
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      time_format %s
+      time_field  metadata.time
+
+      field_integer metadata.time
+      field_string  metadata.node,log
+    CONFIG
+    stub_client(driver)
+    driver.instance.start
+    buf = driver.instance.format_stream("my.tag", [input])
+    driver.instance.shutdown
+
+    assert_equal expected, MessagePack.unpack(buf)
+  end
+
   def test_write
     entry = {"json" => {"a" => "b"}}, {"json" => {"b" => "c"}}
     driver = create_driver(CONFIG)
