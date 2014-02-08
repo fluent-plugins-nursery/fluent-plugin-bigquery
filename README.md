@@ -1,4 +1,4 @@
-# fluent-plugin-bigquery
+# fluent-plugin-bigquery, a plugin for [Fluentd](http://fluentd.org)
 
 Fluentd output plugin to load/insert data into Google BigQuery.
 
