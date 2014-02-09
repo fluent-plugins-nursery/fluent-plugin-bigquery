@@ -1,6 +1,6 @@
 # fluent-plugin-bigquery
 
-Fluentd output plugin to load/insert data into Google BigQuery.
+[Fluentd](http://fluentd.org) output plugin to load/insert data into Google BigQuery.
 
 * insert data over streaming inserts
   * for continuous real-time insertions, under many limitations
