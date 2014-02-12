@@ -171,6 +171,17 @@ module Fluent
         end
       end
       @timef = TimeFormatter.new(@time_format, @localtime)
+
+      if @time_field
+        keys = @time_field.split('.')
+        last_key = keys.pop
+        @add_time_field = lambda {|record, time|
+          keys.inject(record) { |h, k| h[k] ||= {} }[last_key] = @timef.format(time)
+          record
+        }
+      else
+        @add_time_field = lambda {|record, time| record }
+      end
     end
 
     def start
@@ -260,11 +271,7 @@ module Fluent
       super
       buf = ''
       es.each do |time, record|
-        row = if @time_field
-                @fields.format(record.merge({@time_field => @timef.format(time)}))
-              else
-                @fields.format(record)
-              end
+        row = @fields.format(@add_time_field.call(record, time))
         buf << {"json" => row}.to_msgpack unless row.empty?
       end
       buf
