@@ -1,0 +1,27 @@
+[
+  {
+    "name": "time",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED"
+  },
+  {
+    "name": "tty",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "pwd",
+    "type": "STRING",
+    "mode": "REQUIRED"
+  },
+  {
+    "name": "user",
+    "type": "STRING",
+    "mode": "REQUIRED"
+  },
+  {
+    "name": "argv",
+    "type": "STRING",
+    "mode": "REPEATED"
+  }
+]

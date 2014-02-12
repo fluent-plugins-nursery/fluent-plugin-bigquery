@@ -316,8 +316,37 @@ module Fluent
     #   client
     # end
 
+    class << (Nullable = Object.new)
+      def apply(value)
+        yield value unless value.nil?
+      end
+    end
+
+    class << (Required = Object.new)
+      def apply(value)
+        raise "Required field cannot be null" if value.nil?
+        yield value
+      end
+    end
+
+    class << (Repeated = Object.new)
+      def apply(value, &block)
+        value ? value.map(&block) : []
+      end
+    end
+
     class FieldSchema
+      def initialize(mode = Nullable)
+        @mode = mode
+      end
+
       def format(value)
+        @mode.apply(value) do |v|
+          format_one v
+        end
+      end
+
+      def format_one(value)
         raise NotImplementedError, "Must implement in a subclass" 
       end
     end
@@ -327,7 +356,7 @@ module Fluent
         :string
       end
 
-      def format(value)
+      def format_one(value)
         value.to_s
       end
     end
@@ -337,7 +366,7 @@ module Fluent
         :integer
       end
 
-      def format(value)
+      def format_one(value)
         value.to_i
       end
     end
@@ -347,7 +376,7 @@ module Fluent
         :float
       end
 
-      def format(value)
+      def format_one(value)
         value.to_f
       end
     end
@@ -357,7 +386,7 @@ module Fluent
         :boolean
       end
 
-      def format(value)
+      def format_one(value)
         !!value
       end
     end
@@ -367,12 +396,18 @@ module Fluent
         :timestamp
       end
 
-      def format(value)
+      def format_one(value)
         value
       end
     end
 
     class RecordSchema < FieldSchema
+      MODES = {
+        :nullable => Nullable,
+        :required => Required,
+        :repeated => Repeated,
+      }.freeze
+
       FIELD_TYPES = {
         :string => StringFieldSchema,
         :integer => IntegerFieldSchema,
@@ -382,7 +417,8 @@ module Fluent
         :record => RecordSchema
       }.freeze
 
-      def initialize
+      def initialize(mode = Nullable)
+        super(mode)
         @fields = {}
       end
 
@@ -402,7 +438,9 @@ module Fluent
           field_schema_class = FIELD_TYPES[type]
           raise ConfigError, "Invalid field type: #{field['type']}" unless field_schema_class
 
-          field_schema = field_schema_class.new
+          mode = MODES[(field['mode'] || 'nullable').downcase.to_sym]
+          raise ConfigError, "Invalid mode: #{field['mode']}" unless mode
+          field_schema = field_schema_class.new(mode)
           @fields[field['name']] = field_schema
           if type == :record
             raise ConfigError, "record field must have fields" unless field.key?('fields')
@@ -427,12 +465,13 @@ module Fluent
         end
       end
 
-      def format(record)
+      def format_one(record)
         out = {}
         @fields.each do |key, schema|
           value = record[key]
-          next if value.nil? # field does not exists, or null value
-          out[key] = schema.format(value)
+          formatted = schema.format(value)
+          next if formatted.nil? # field does not exists, or null value
+          out[key] = formatted
         end
         out
       end

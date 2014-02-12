@@ -236,7 +236,7 @@ With this configuration, flushing will be done in 0.25 seconds after record inpu
 * support Load API
   * with automatically configured flush/buffer options
 * support optional data fields
-* support NULLABLE/REQUIRED/REPEATED field options
+* support NULLABLE/REQUIRED/REPEATED field options in field list style of configuration
 * OAuth installed application credentials support
 * Google API discovery expiration
 * Error classes

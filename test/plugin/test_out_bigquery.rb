@@ -307,6 +307,84 @@ class BigQueryOutputTest < Test::Unit::TestCase
     assert_equal expected, MessagePack.unpack(buf)
   end
 
+  def test_format_repeated_field_with_schema
+    now = Time.now
+    input = [
+      now,
+      {
+        "tty" => nil,
+        "pwd" => "/home/yugui",
+        "user" => "fluentd",
+        "argv" => %w[ tail -f /var/log/fluentd/fluentd.log ]
+      }
+    ]
+    expected = {
+      "json" => {
+        "time" => now.to_i,
+        "pwd" => "/home/yugui",
+        "user" => "fluentd",
+        "argv" => %w[ tail -f /var/log/fluentd/fluentd.log ]
+      }
+    }
+
+    driver = create_driver(<<-CONFIG)
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      time_format %s
+      time_field  time
+
+      schema_path #{File.join(File.dirname(__FILE__), "testdata", "sudo.schema")}
+      field_integer time
+    CONFIG
+    mock_client(driver) do |expect|
+      expect.discovered_api("bigquery", "v2") { stub! }
+    end
+    driver.instance.start
+    buf = driver.instance.format_stream("my.tag", [input])
+    driver.instance.shutdown
+
+    assert_equal expected, MessagePack.unpack(buf)
+  end
+
+  def test_empty_value_in_required
+    now = Time.now
+    input = [
+      now,
+      {
+        "tty" => "pts/1",
+        "pwd" => "/home/yugui",
+        "user" => nil,
+        "argv" => %w[ tail -f /var/log/fluentd/fluentd.log ]
+      }
+    ]
+
+    driver = create_driver(<<-CONFIG)
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      time_format %s
+      time_field  time
+
+      schema_path #{File.join(File.dirname(__FILE__), "testdata", "sudo.schema")}
+      field_integer time
+    CONFIG
+    mock_client(driver) do |expect|
+      expect.discovered_api("bigquery", "v2") { stub! }
+    end
+    driver.instance.start
+    assert_raises(RuntimeError, /cannot be null/) do
+      driver.instance.format_stream("my.tag", [input])
+    end
+    driver.instance.shutdown
+  end
+
   def test_write
     entry = {"json" => {"a" => "b"}}, {"json" => {"b" => "c"}}
     driver = create_driver(CONFIG)
