@@ -145,7 +145,7 @@ module Fluent
 
       @tablelist = @tables ? @tables.split(',') : [@table]
 
-      @fields = RecordSchema.new
+      @fields = RecordSchema.new('record')
       if @schema_path
         @fields.load_schema(JSON.parse(File.read(@schema_path)))
       end
@@ -316,33 +316,27 @@ module Fluent
     #   client
     # end
 
-    class << (Nullable = Object.new)
-      def apply(value)
-        yield value unless value.nil?
-      end
-    end
-
-    class << (Required = Object.new)
-      def apply(value)
-        raise "Required field cannot be null" if value.nil?
-        yield value
-      end
-    end
-
-    class << (Repeated = Object.new)
-      def apply(value, &block)
-        value ? value.map(&block) : []
-      end
-    end
-
     class FieldSchema
-      def initialize(mode = Nullable)
+      def initialize(name, mode = :nullable)
+        unless [:nullable, :required, :repeated].include?(mode)
+          raise ConfigError, "Unrecognized mode for #{name}: #{mode}"
+        end
+
+        @name = name
         @mode = mode
       end
 
+      attr_reader :name, :mode
+
       def format(value)
-        @mode.apply(value) do |v|
-          format_one v
+        case @mode
+        when :nullable
+          format_one(value) unless value.nil?
+        when :required
+          raise "Required field #{name} cannot be null" if value.nil?
+          format_one(value)
+        when :repeated
+          value.nil? ? [] : value.map {|v| format_one(v) }
         end
       end
 
@@ -402,12 +396,6 @@ module Fluent
     end
 
     class RecordSchema < FieldSchema
-      MODES = {
-        :nullable => Nullable,
-        :required => Required,
-        :repeated => Repeated,
-      }.freeze
-
       FIELD_TYPES = {
         :string => StringFieldSchema,
         :integer => IntegerFieldSchema,
@@ -417,8 +405,8 @@ module Fluent
         :record => RecordSchema
       }.freeze
 
-      def initialize(mode = Nullable)
-        super(mode)
+      def initialize(name, mode = :nullable)
+        super(name, mode)
         @fields = {}
       end
 
@@ -434,14 +422,15 @@ module Fluent
         schema.each do |field|
           raise ConfigError, 'field must have type' unless field.key?('type')
 
+          name = field['name']
+          mode = (field['mode'] || 'nullable').downcase.to_sym
+
           type = field['type'].downcase.to_sym
           field_schema_class = FIELD_TYPES[type]
           raise ConfigError, "Invalid field type: #{field['type']}" unless field_schema_class
 
-          mode = MODES[(field['mode'] || 'nullable').downcase.to_sym]
-          raise ConfigError, "Invalid mode: #{field['mode']}" unless mode
-          field_schema = field_schema_class.new(mode)
-          @fields[field['name']] = field_schema
+          field_schema = field_schema_class.new(name, mode)
+          @fields[name] = field_schema
           if type == :record
             raise ConfigError, "record field must have fields" unless field.key?('fields')
             field_schema.load_schema(field['fields'])
@@ -461,7 +450,7 @@ module Fluent
         else
           schema = FIELD_TYPES[type]
           raise ConfigError, "[Bug] Invalid field type #{type}" unless schema
-          @fields[name] = schema.new
+          @fields[name] = schema.new(name)
         end
       end
 
@@ -479,7 +468,7 @@ module Fluent
       private
       def register_record_field(name)
         if !@fields.key?(name)
-          @fields[name] = RecordSchema.new
+          @fields[name] = RecordSchema.new(name)
         else
           unless @fields[name].kind_of?(RecordSchema)
             raise ConfigError, "field #{name} is required to be a record but already registered as #{@field[name]}"
