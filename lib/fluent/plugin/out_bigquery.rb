@@ -125,6 +125,11 @@ module Fluent
       require 'google/api_client/auth/compute_service_account'
     end
 
+    # Define `log` method for v0.10.42 or earlier
+    unless method_defined?(:log)
+      define_method("log") { $log }
+    end
+
     def configure(conf)
       super
 
@@ -259,10 +264,10 @@ module Fluent
             res_obj = JSON.parse(res.body)
             message = res_obj['error']['message'] || res.body
           rescue => e
-            $log.warn "Parse error: google api error response body", :body => res.body
+            log.warn "Parse error: google api error response body", :body => res.body
           end
         end
-        $log.error "tabledata.insertAll API", :project_id => @project_id, :dataset => @dataset_id, :table => table_id, :code => res.status, :message => message
+        log.error "tabledata.insertAll API", :project_id => @project_id, :dataset => @dataset_id, :table => table_id, :code => res.status, :message => message
         raise "failed to insert into bigquery" # TODO: error class
       end
     end
