@@ -8,8 +8,6 @@ require 'fluent/mixin/plaintextformatter'
 ## TODO: load implementation
 # require 'fluent/plugin/bigquery/load_request_body_wrapper'
 
-require 'fluent/plugin/output_try_flush_interval_patch'
-
 module Fluent
   ### TODO: error classes for each api error responses
   # class BigQueryAPIError < StandardError
