@@ -3,7 +3,7 @@
 [Fluentd](http://fluentd.org) output plugin to load/insert data into Google BigQuery.
 
 * insert data over streaming inserts
-  * for continuous real-time insertions, under many limitations
+  * for continuous real-time insertions
   * https://developers.google.com/bigquery/streaming-data-into-bigquery#usecases
 * (NOT IMPLEMENTED) load data
   * for data loading as batch jobs, for big amount of data
@@ -202,34 +202,6 @@ where /path/to/httpd.schema is a path to the JSON-encoded schema file which you 
 
 NOTE: Since JSON does not define how to encode data of TIMESTAMP type,
 you are still recommended to specify JSON types for TIMESTAMP fields as "time" field does in the example.
-
-
-### patches
-
-This plugin depends on `fluent-plugin-buffer-lightening`, and it includes monkey patch module for BufferedOutput plugin, to realize high rate and low latency flushing. With this patch, sub 1 second flushing available.
-
-To use this feature, execute fluentd with `-r fluent/plugin/output_try_flush_interval_patch` option.
-And configure `flush_interval` and `try_flush_interval` with floating point value.
-
-```apache
-<match dummy>
-  type bigquery
-  
-  method insert    # default
-  
-  flush_interval     0.2
-  try_flush_interval 0.05
-  
-  buffer_chunk_records_limit 300  # default rate limit for users is 100
-  buffer_queue_limit 10240        # 1MB * 10240 -> 10GB!
-  
-  num_threads 16
-  
-  # credentials, project/dataset/table and schema specs.
-</match>
-```
-
-With this configuration, flushing will be done in 0.25 seconds after record inputs in the worst case.
 
 ## TODO
 
