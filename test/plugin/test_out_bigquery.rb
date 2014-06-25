@@ -75,6 +75,69 @@ class BigQueryOutputTest < Test::Unit::TestCase
     driver.instance.client()
   end
 
+  def test_configure_fieldname_stripped
+    driver = create_driver(%[
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      time_format %s
+      time_field  time
+
+      field_integer time  , status , bytes 
+      field_string  vhost ,path,method,protocol, agent,referer, remote.host ,remote.ip,remote.user 
+      field_float   requesttime 
+      field_boolean bot_access , loginsession 
+    ])
+    fields = driver.instance.instance_eval{ @fields }
+
+    assert (not fields['time  ']), "tailing spaces must be stripped"
+    assert fields['time']
+    assert fields['status']
+    assert fields['bytes']
+    assert fields['vhost']
+    assert fields['protocol']
+    assert fields['agent']
+    assert fields['referer']
+    assert fields['remote']['host']
+    assert fields['remote']['ip']
+    assert fields['remote']['user']
+    assert fields['requesttime']
+    assert fields['bot_access']
+    assert fields['loginsession']
+  end
+
+  def test_configure_invalid_fieldname
+    base = %[
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      time_format %s
+      time_field  time
+    ]
+
+    assert_raises(Fluent::ConfigError) do
+      create_driver(base + "field_integer time field\n")
+    end
+    assert_raises(Fluent::ConfigError) do
+      create_driver(base + "field_string my name\n")
+    end
+    assert_raises(Fluent::ConfigError) do
+      create_driver(base + "field_string remote.host name\n")
+    end
+    assert_raises(Fluent::ConfigError) do
+      create_driver(base + "field_float request time\n")
+    end
+    assert_raises(Fluent::ConfigError) do
+      create_driver(base + "field_boolean login session\n")
+    end
+  end
+
   def test_format_stream
     now = Time.now
     input = [

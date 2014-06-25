@@ -154,22 +154,22 @@ module Fluent
       end
       if @field_string
         @field_string.split(',').each do |fieldname|
-          @fields.register_field fieldname, :string
+          @fields.register_field fieldname.strip, :string
         end
       end
       if @field_integer
         @field_integer.split(',').each do |fieldname|
-          @fields.register_field fieldname, :integer
+          @fields.register_field fieldname.strip, :integer
         end
       end
       if @field_float
         @field_float.split(',').each do |fieldname|
-          @fields.register_field fieldname, :float
+          @fields.register_field fieldname.strip, :float
         end
       end
       if @field_boolean
         @field_boolean.split(',').each do |fieldname|
-          @fields.register_field fieldname, :boolean
+          @fields.register_field fieldname.strip, :boolean
         end
       end
 
@@ -323,6 +323,14 @@ module Fluent
       def initialize(name, mode = :nullable)
         unless [:nullable, :required, :repeated].include?(mode)
           raise ConfigError, "Unrecognized mode for #{name}: #{mode}"
+        end
+        ### https://developers.google.com/bigquery/docs/tables
+        # Each field has the following properties:
+        #
+        # name - Field names are any combination of uppercase and/or lowercase letters (A-Z, a-z),
+        #        digits (0-9) and underscores, but no spaces. The first character must be a letter.
+        unless name =~ /^[A-Za-z][_A-Za-z0-9]*$/
+          raise Fluent::ConfigError, "invalid bigquery field name: '#{name}'"
         end
 
         @name = name
