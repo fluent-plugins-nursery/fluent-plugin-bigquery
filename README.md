@@ -136,6 +136,33 @@ Compute Engine instance, then you can configure fluentd like this.
 </match>
 ```
 
+### Table id formatting
+
+`table` and `tables` options accept [Time#strftime](http://ruby-doc.org/core-1.9.3/Time.html#method-i-strftime)
+format to construct table ids.
+Table ids are formatted at runtime
+using the local time of the fluentd server.
+
+For example, with the configuration below,
+data is inserted into tables `accesslog_2014_08`, `accesslog_2014_09` and so on.
+
+```apache
+<match dummy>
+  type bigquery
+  
+  ...
+  
+  project yourproject_id
+  dataset yourdataset_id
+  table   accesslog_%Y_%m
+  
+  ...
+</match>
+```
+
+Note that the timestamp of logs and the date in the table id do not always match,
+because there is a time lag between collection and transmission of logs.
+
 ### Table schema
 
 There are two methods to describe the schema of the target table.

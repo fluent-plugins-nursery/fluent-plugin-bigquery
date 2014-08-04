@@ -473,4 +473,51 @@ class BigQueryOutputTest < Test::Unit::TestCase
     driver.instance.write(chunk)
     driver.instance.shutdown
   end
+
+  # Can format the table id in the strftime syntax, such as 'foo_%Y_%m_%d'
+  def test_write_to_table_whose_id_includes_date
+    entry = {"json" => {"a" => "b"}}, {"json" => {"b" => "c"}}
+    driver = create_driver(<<-CONFIG)
+      table foo_%Y_%m_%d
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      time_format %s
+      time_field  time
+
+      field_integer time,status,bytes
+      field_string  vhost,path,method,protocol,agent,referer,remote.host,remote.ip,remote.user
+      field_float   requesttime
+      field_boolean bot_access,loginsession
+    CONFIG
+
+    # The stub current time is 2014-08-04T12:40:05
+    def (driver.instance).now
+      Time.local(2014, 8, 4, 12, 40, 5)
+    end
+
+    mock_client(driver) do |expect|
+      expect.discovered_api("bigquery", "v2") { mock!.tabledata.mock!.insert_all { Object.new } }
+      expect.execute(
+        :api_method => anything,
+        :parameters => {
+          'projectId' => 'yourproject_id',
+          'datasetId' => 'yourdataset_id',
+          'tableId' => 'foo_2014_08_04',
+        },
+        :body_object => {
+          'rows' => [entry]
+        }
+      ) { stub!.success? { true } }
+    end
+
+    chunk = Fluent::MemoryBufferChunk.new("my.tag")
+    chunk << entry.to_msgpack
+
+    driver.instance.start
+    driver.instance.write(chunk)
+    driver.instance.shutdown
+  end
 end

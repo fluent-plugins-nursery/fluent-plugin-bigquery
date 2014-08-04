@@ -240,7 +240,12 @@ module Fluent
       @cached_client = client
     end
 
-    def insert(table_id, rows)
+    def now
+      Time.now
+    end
+
+    def insert(table_id_format, rows)
+      table_id = now.strftime(table_id_format)
       res = client().execute(
         :api_method => @bq.tabledata.insert_all,
         :parameters => {
