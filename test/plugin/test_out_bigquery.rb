@@ -473,4 +473,12 @@ class BigQueryOutputTest < Test::Unit::TestCase
     driver.instance.write(chunk)
     driver.instance.shutdown
   end
+
+  def test_generate_table_id
+    driver = create_driver
+    table_id_format = 'foo_%Y_%m_%d'
+    time = Time.local(2014, 8, 11, 21, 20, 56)
+    table_id = driver.instance.generate_table_id(table_id_format, time)
+    assert_equal 'foo_2014_08_11', table_id
+  end
 end
