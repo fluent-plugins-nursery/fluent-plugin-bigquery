@@ -413,6 +413,113 @@ class BigQueryOutputTest < Test::Unit::TestCase
     assert_equal expected, MessagePack.unpack(buf)
   end
 
+  def test_format_fetch_from_bigquery_api
+    now = Time.now
+    input = [
+      now,
+      {
+        "tty" => nil,
+        "pwd" => "/home/yugui",
+        "user" => "fluentd",
+        "argv" => %w[ tail -f /var/log/fluentd/fluentd.log ]
+      }
+    ]
+    expected = {
+      "json" => {
+        "time" => now.to_i,
+        "pwd" => "/home/yugui",
+        "user" => "fluentd",
+        "argv" => %w[ tail -f /var/log/fluentd/fluentd.log ]
+      }
+    }
+
+    driver = create_driver(<<-CONFIG)
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      time_format %s
+      time_field  time
+
+      fetch_schema true
+      field_integer time
+    CONFIG
+    mock_client(driver) do |expect|
+      expect.discovered_api("bigquery", "v2") { mock!.tables.mock!.get { Object.new } }
+      expect.execute(
+        :api_method => anything,
+        :parameters => {
+          'projectId' => 'yourproject_id',
+          'datasetId' => 'yourdataset_id',
+          'tableId' => 'foo'
+        }
+      ) {
+        s = stub!
+        s.success? { true }
+        s.body {
+          JSON.generate({
+            schema: {
+              fields: [
+                {
+                  name: "time",
+                  type: "TIMESTAMP",
+                  mode: "REQUIRED"
+                },
+                {
+                  name: "tty",
+                  type: "STRING",
+                  mode: "NULLABLE"
+                },
+                {
+                  name: "pwd",
+                  type: "STRING",
+                  mode: "REQUIRED"
+                },
+                {
+                  name: "user",
+                  type: "STRING",
+                  mode: "REQUIRED"
+                },
+                {
+                  name: "argv",
+                  type: "STRING",
+                  mode: "REPEATED"
+                }
+              ]
+            }
+          })
+        }
+        s
+      }
+    end
+    driver.instance.start
+    buf = driver.instance.format_stream("my.tag", [input])
+    driver.instance.shutdown
+
+    fields = driver.instance.instance_eval{ @fields }
+    assert fields["time"]
+    assert_equal :integer, fields["time"].type  # DO NOT OVERWRITE
+    assert_equal :nullable, fields["time"].mode # DO NOT OVERWRITE
+    
+    assert fields["tty"]
+    assert_equal :string, fields["tty"].type
+    assert_equal :nullable, fields["tty"].mode
+    
+    assert fields["pwd"]
+    assert_equal :string, fields["pwd"].type
+    assert_equal :required, fields["pwd"].mode
+
+    assert fields["user"]
+    assert_equal :string, fields["user"].type
+    assert_equal :required, fields["user"].mode
+
+    assert fields["argv"]
+    assert_equal :string, fields["argv"].type
+    assert_equal :repeated, fields["argv"].mode
+  end
+
   def test_empty_value_in_required
     now = Time.now
     input = [
