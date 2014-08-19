@@ -273,7 +273,7 @@ module Fluent
             log.warn "Parse error: google api error response body", :body => res.body
           end
         end
-        log.error "tabledata.insertAll API", :project_id => @project_id, :dataset => @dataset_id, :table => table_id, :code => res.status, :message => message
+        log.error "tabledata.insertAll API", :project_id => @project, :dataset => @dataset, :table => table_id, :code => res.status, :message => message
         raise "failed to insert into bigquery" # TODO: error class
       end
     end
@@ -334,7 +334,7 @@ module Fluent
             log.warn "Parse error: google api error response body", :body => res.body
           end
         end
-        log.error "tables.get API", :project_id => @project_id, :dataset => @dataset_id, :table => table_id, :code => res.status, :message => message
+        log.error "tables.get API", :project_id => @project, :dataset => @dataset, :table => table_id, :code => res.status, :message => message
         raise "failed to fetch schema from bigquery" # TODO: error class
       end
 
