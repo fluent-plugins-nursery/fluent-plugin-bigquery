@@ -240,3 +240,8 @@ you are still recommended to specify JSON types for TIMESTAMP fields as "time" f
 * Google API discovery expiration
 * Error classes
 * check row size limits
+
+## Authors
+
+* @tagomoris: First author, original version
+* KAIZEN platform Inc.: Maintener, Since 2014.08.19
