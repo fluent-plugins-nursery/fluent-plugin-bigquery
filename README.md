@@ -165,10 +165,11 @@ because there is a time lag between collection and transmission of logs.
 
 ### Table schema
 
-There are two methods to describe the schema of the target table.
+There are three methods to describe the schema of the target table.
 
 1. List fields in fluent.conf
 2. Load a schema file in JSON.
+3. Fetch a schema using BigQuery API
 
 The examples above use the first method.  In this method,
 you can also specify nested fields by prefixing their belonging record fields.
@@ -176,12 +177,12 @@ you can also specify nested fields by prefixing their belonging record fields.
 ```apache
 <match dummy>
   type bigquery
-
+  
   ...
   
   time_format %s
   time_field  time
-
+  
   field_integer time,response.status,response.bytes
   field_string  request.vhost,request.path,request.method,request.protocol,request.agent,request.referer,remote.host,remote.ip,remote.user
   field_float   request.time
@@ -215,20 +216,38 @@ The second method is to specify a path to a BigQuery schema file instead of list
 ```apache
 <match dummy>
   type bigquery
-
+  
   ...
-
+  
   time_format %s
   time_field  time
-
+  
   schema_path /path/to/httpd.schema
   field_integer time
 </match>
 ```
 where /path/to/httpd.schema is a path to the JSON-encoded schema file which you used for creating the table on BigQuery.
 
+The third method is to set `fetch_schame` to `true` to enable fetch a schema using BigQuery API.  In this case, your fluent.conf looks like:
+
+```apache
+<match dummy>
+  type bigquery
+  
+  ...
+  
+  time_format %s
+  time_field  time
+  
+  fetch_schema true
+  field_integer time
+</match>
+```
+
+If you specify multiple talbe in configuration file, plugin get all schema data from BigQuery and merge it.
+
 NOTE: Since JSON does not define how to encode data of TIMESTAMP type,
-you are still recommended to specify JSON types for TIMESTAMP fields as "time" field does in the example.
+you are still recommended to specify JSON types for TIMESTAMP fields as "time" field does in the example, if you use second or third method.
 
 ## TODO
 
