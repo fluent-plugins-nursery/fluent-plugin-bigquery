@@ -6,11 +6,11 @@ require 'fluent/plugin/bigquery/version'
 Gem::Specification.new do |spec|
   spec.name          = "fluent-plugin-bigquery"
   spec.version       = Fluent::BigQueryPlugin::VERSION
-  spec.authors       = ["TAGOMORI Satoshi"]
-  spec.email         = ["tagomoris@gmail.com"]
+  spec.authors       = ["Naoya Ito"]
+  spec.email         = ["i.naoya@gmail.com"]
   spec.description   = %q{Fluentd plugin to store data on Google BigQuery, by load, or by stream inserts}
   spec.summary       = %q{Fluentd plugin to store data on Google BigQuery}
-  spec.homepage      = "https://github.com/tagomoris/fluent-plugin-bigquery"
+  spec.homepage      = "https://github.com/kaizenplatform/fluent-plugin-bigquery"
   spec.license       = "APLv2"
 
   spec.files         = `git ls-files`.split($/)
