@@ -311,7 +311,8 @@ module Fluent
     end
 
     def fetch_schema
-      table_id = @tablelist[0]
+      table_id_format = @tablelist[0]
+      table_id = generate_table_id(table_id_format, Time.at(Fluent::Engine.now))
       res = client.execute(
         :api_method => @bq.tables.get,
         :parameters => {
