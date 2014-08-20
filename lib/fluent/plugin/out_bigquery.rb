@@ -62,6 +62,7 @@ module Fluent
     config_param :tables, :string, :default => nil
 
     config_param :schema_path, :string, :default => nil
+    config_param :fetch_schema, :bool, :default => false
     config_param :field_string,  :string, :default => nil
     config_param :field_integer, :string, :default => nil
     config_param :field_float,   :string, :default => nil
@@ -201,6 +202,8 @@ module Fluent
 
       @tables_queue = @tablelist.dup.shuffle
       @tables_mutex = Mutex.new
+
+      fetch_schema() if @fetch_schema
     end
 
     def shutdown
@@ -270,7 +273,7 @@ module Fluent
             log.warn "Parse error: google api error response body", :body => res.body
           end
         end
-        log.error "tabledata.insertAll API", :project_id => @project_id, :dataset => @dataset_id, :table => table_id, :code => res.status, :message => message
+        log.error "tabledata.insertAll API", :project_id => @project, :dataset => @dataset, :table => table_id, :code => res.status, :message => message
         raise "failed to insert into bigquery" # TODO: error class
       end
     end
@@ -305,6 +308,40 @@ module Fluent
         t
       end
       insert(insert_table, rows)
+    end
+
+    def fetch_schema
+      table_id = @tablelist[0]
+      res = client.execute(
+        :api_method => @bq.tables.get,
+        :parameters => {
+          'projectId' => @project,
+          'datasetId' => @dataset,
+          'tableId' => table_id,
+        }
+      )
+
+      unless res.success?
+        # api_error? -> client cache clear
+        @cached_client = nil
+
+        message = res.body
+        if res.body =~ /^\{/
+          begin
+            res_obj = JSON.parse(res.body)
+            message = res_obj['error']['message'] || res.body
+          rescue => e
+            log.warn "Parse error: google api error response body", :body => res.body
+          end
+        end
+        log.error "tables.get API", :project_id => @project, :dataset => @dataset, :table => table_id, :code => res.status, :message => message
+        raise "failed to fetch schema from bigquery" # TODO: error class
+      end
+
+      res_obj = JSON.parse(res.body)
+      schema = res_obj['schema']['fields']
+      log.debug "Load schema from BigQuery: #{@project}:#{@dataset}.#{table_id} #{schema}"
+      @fields.load_schema(schema, false)
     end
 
     # def client_oauth # not implemented
@@ -434,7 +471,7 @@ module Fluent
         @fields[name]
       end
 
-      def load_schema(schema)
+      def load_schema(schema, allow_overwrite=true)
         schema.each do |field|
           raise ConfigError, 'field must have type' unless field.key?('type')
 
@@ -445,11 +482,13 @@ module Fluent
           field_schema_class = FIELD_TYPES[type]
           raise ConfigError, "Invalid field type: #{field['type']}" unless field_schema_class
 
+          next if @fields.key?(name) and !allow_overwrite
+
           field_schema = field_schema_class.new(name, mode)
           @fields[name] = field_schema
           if type == :record
             raise ConfigError, "record field must have fields" unless field.key?('fields')
-            field_schema.load_schema(field['fields'])
+            field_schema.load_schema(field['fields'], allow_overwrite)
           end
         end
       end
