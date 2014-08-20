@@ -458,39 +458,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       ) {
         s = stub!
         s.success? { true }
-        s.body {
-          JSON.generate({
-            schema: {
-              fields: [
-                {
-                  name: "time",
-                  type: "TIMESTAMP",
-                  mode: "REQUIRED"
-                },
-                {
-                  name: "tty",
-                  type: "STRING",
-                  mode: "NULLABLE"
-                },
-                {
-                  name: "pwd",
-                  type: "STRING",
-                  mode: "REQUIRED"
-                },
-                {
-                  name: "user",
-                  type: "STRING",
-                  mode: "REQUIRED"
-                },
-                {
-                  name: "argv",
-                  type: "STRING",
-                  mode: "REPEATED"
-                }
-              ]
-            }
-          })
-        }
+        s.body { JSON.generate(sudo_schema_response) }
         s
       }
     end
@@ -498,11 +466,90 @@ class BigQueryOutputTest < Test::Unit::TestCase
     buf = driver.instance.format_stream("my.tag", [input])
     driver.instance.shutdown
 
+    assert_equal expected, MessagePack.unpack(buf)
+
     fields = driver.instance.instance_eval{ @fields }
     assert fields["time"]
     assert_equal :integer, fields["time"].type  # DO NOT OVERWRITE
     assert_equal :nullable, fields["time"].mode # DO NOT OVERWRITE
+
+    assert fields["tty"]
+    assert_equal :string, fields["tty"].type
+    assert_equal :nullable, fields["tty"].mode
     
+    assert fields["pwd"]
+    assert_equal :string, fields["pwd"].type
+    assert_equal :required, fields["pwd"].mode
+
+    assert fields["user"]
+    assert_equal :string, fields["user"].type
+    assert_equal :required, fields["user"].mode
+
+    assert fields["argv"]
+    assert_equal :string, fields["argv"].type
+    assert_equal :repeated, fields["argv"].mode
+  end
+
+  def test_format_fetch_from_bigquery_api_with_generated_table_id
+    now = Time.now
+    input = [
+      now,
+      {
+        "tty" => nil,
+        "pwd" => "/home/yugui",
+        "user" => "fluentd",
+        "argv" => %w[ tail -f /var/log/fluentd/fluentd.log ]
+      }
+    ]
+    expected = {
+      "json" => {
+        "time" => now.to_i,
+        "pwd" => "/home/yugui",
+        "user" => "fluentd",
+        "argv" => %w[ tail -f /var/log/fluentd/fluentd.log ]
+      }
+    }
+
+    driver = create_driver(<<-CONFIG)
+      table foo_%Y_%m_%d
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      time_format %s
+      time_field  time
+
+      fetch_schema true
+      field_integer time
+    CONFIG
+    mock_client(driver) do |expect|
+      expect.discovered_api("bigquery", "v2") { mock!.tables.mock!.get { Object.new } }
+      expect.execute(
+        :api_method => anything,
+        :parameters => {
+          'projectId' => 'yourproject_id',
+          'datasetId' => 'yourdataset_id',
+          'tableId' => now.strftime('foo_%Y_%m_%d')
+        }
+      ) {
+        s = stub!
+        s.success? { true }
+        s.body { JSON.generate(sudo_schema_response) }
+        s
+      }
+    end
+    driver.instance.start
+    buf = driver.instance.format_stream("my.tag", [input])
+    driver.instance.shutdown
+
+    assert_equal expected, MessagePack.unpack(buf)
+
+    fields = driver.instance.instance_eval{ @fields }
+    assert fields["time"]
+    assert_equal :integer, fields["time"].type  # DO NOT OVERWRITE
+    assert_equal :nullable, fields["time"].mode # DO NOT OVERWRITE
+
     assert fields["tty"]
     assert_equal :string, fields["tty"].type
     assert_equal :nullable, fields["tty"].mode
@@ -587,5 +634,41 @@ class BigQueryOutputTest < Test::Unit::TestCase
     time = Time.local(2014, 8, 11, 21, 20, 56)
     table_id = driver.instance.generate_table_id(table_id_format, time)
     assert_equal 'foo_2014_08_11', table_id
+  end
+
+  private
+
+  def sudo_schema_response
+    {
+      schema: {
+        fields: [
+          {
+            name: "time",
+            type: "TIMESTAMP",
+            mode: "REQUIRED"
+          },
+          {
+            name: "tty",
+            type: "STRING",
+            mode: "NULLABLE"
+          },
+          {
+            name: "pwd",
+            type: "STRING",
+            mode: "REQUIRED"
+          },
+          {
+            name: "user",
+            type: "STRING",
+            mode: "REQUIRED"
+          },
+          {
+            name: "argv",
+            type: "STRING",
+            mode: "REPEATED"
+          }
+        ]
+      }
+    }
   end
 end
