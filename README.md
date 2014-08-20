@@ -228,7 +228,7 @@ The second method is to specify a path to a BigQuery schema file instead of list
 ```
 where /path/to/httpd.schema is a path to the JSON-encoded schema file which you used for creating the table on BigQuery.
 
-The third method is to set `fetch_schame` to `true` to enable fetch a schema using BigQuery API.  In this case, your fluent.conf looks like:
+The third method is to set `fetch_schema` to `true` to enable fetch a schema using BigQuery API.  In this case, your fluent.conf looks like:
 
 ```apache
 <match dummy>
