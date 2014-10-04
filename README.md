@@ -38,7 +38,7 @@ Configure insert specifications with target table schema, with your credentials.
   
   field_integer time,status,bytes
   field_string  rhost,vhost,path,method,protocol,agent,referer
-  field_float   requestime
+  field_float   requesttime
   field_boolean bot_access,loginsession
 </match>
 ```
@@ -72,7 +72,7 @@ For high rate inserts over streaming inserts, you should specify flush intervals
   
   field_integer time,status,bytes
   field_string  rhost,vhost,path,method,protocol,agent,referer
-  field_float   requestime
+  field_float   requesttime
   field_boolean bot_access,loginsession
 </match>
 ```
@@ -131,7 +131,7 @@ Compute Engine instance, then you can configure fluentd like this.
   
   field_integer time,status,bytes
   field_string  rhost,vhost,path,method,protocol,agent,referer
-  field_float   requestime
+  field_float   requesttime
   field_boolean bot_access,loginsession
 </match>
 ```
@@ -244,7 +244,7 @@ The third method is to set `fetch_schema` to `true` to enable fetch a schema usi
 </match>
 ```
 
-If you specify multiple talbe in configuration file, plugin get all schema data from BigQuery and merge it.
+If you specify multiple tables in configuration file, plugin get all schema data from BigQuery and merge it.
 
 NOTE: Since JSON does not define how to encode data of TIMESTAMP type,
 you are still recommended to specify JSON types for TIMESTAMP fields as "time" field does in the example, if you use second or third method.
