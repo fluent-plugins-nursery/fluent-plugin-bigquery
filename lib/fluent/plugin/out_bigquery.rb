@@ -67,7 +67,6 @@ module Fluent
     config_param :field_integer, :string, :default => nil
     config_param :field_float,   :string, :default => nil
     config_param :field_boolean, :string, :default => nil
-    config_param :field_timestamp, :string, :default => nil
     ### TODO: record field stream inserts doesn't works well?
     ###  At table creation, table type json + field type record -> field type validation fails
     ###  At streaming inserts, schema cannot be specified
@@ -172,11 +171,6 @@ module Fluent
       if @field_boolean
         @field_boolean.split(',').each do |fieldname|
           @fields.register_field fieldname.strip, :boolean
-        end
-      end
-      if @field_timestamp
-        @field_timestamp.split(',').each do |fieldname|
-          @fields.register_field fieldname.strip, :timestamp
         end
       end
 
@@ -451,7 +445,7 @@ module Fluent
       end
 
       def format_one(value)
-        Time.at(Time.parse(value)).utc.strftime('%s')
+        value
       end
     end
 
