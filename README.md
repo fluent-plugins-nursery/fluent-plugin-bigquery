@@ -14,7 +14,7 @@ OAuth flow for installed applications.
 
 ## Configuration
 
-### Streming inserts
+### Streaming inserts
 
 Configure insert specifications with target table schema, with your credentials. This is minimum configurations:
 
