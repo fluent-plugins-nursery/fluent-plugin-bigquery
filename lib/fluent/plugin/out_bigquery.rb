@@ -451,7 +451,7 @@ module Fluent
       end
 
       def format_one(value)
-        Time.at(Time.parse(value)).utc.strftime('%s')
+        value
       end
     end
 
