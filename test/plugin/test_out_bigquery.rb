@@ -567,6 +567,80 @@ class BigQueryOutputTest < Test::Unit::TestCase
     assert_equal :repeated, fields["argv"].mode
   end
 
+  def test_format_with_insert_id
+    now = Time.now
+    input = [
+      now,
+      {
+        "uuid" => "9ABFF756-0267-4247-847F-0895B65F0938",
+      }
+    ]
+    expected = {
+      "insertId" => "9ABFF756-0267-4247-847F-0895B65F0938",
+      "json" => {
+        "uuid" => "9ABFF756-0267-4247-847F-0895B65F0938",
+      }
+    }
+
+    driver = create_driver(<<-CONFIG)
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      insert_id_field uuid
+      field_string uuid
+    CONFIG
+    mock_client(driver) do |expect|
+      expect.discovered_api("bigquery", "v2") { stub! }
+    end
+    driver.instance.start
+    buf = driver.instance.format_stream("my.tag", [input])
+    driver.instance.shutdown
+
+    assert_equal expected, MessagePack.unpack(buf)
+  end
+
+  def test_format_with_nested_insert_id
+    now = Time.now
+    input = [
+      now,
+      {
+        "data" => {
+          "uuid" => "809F6BA7-1C16-44CD-9816-4B20E2C7AA2A",
+        },
+      }
+    ]
+    expected = {
+      "insertId" => "809F6BA7-1C16-44CD-9816-4B20E2C7AA2A",
+      "json" => {
+        "data" => {
+          "uuid" => "809F6BA7-1C16-44CD-9816-4B20E2C7AA2A",
+        }
+      }
+    }
+
+    driver = create_driver(<<-CONFIG)
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      insert_id_field data.uuid
+      field_string data.uuid
+    CONFIG
+    mock_client(driver) do |expect|
+      expect.discovered_api("bigquery", "v2") { stub! }
+    end
+    driver.instance.start
+    buf = driver.instance.format_stream("my.tag", [input])
+    driver.instance.shutdown
+
+    assert_equal expected, MessagePack.unpack(buf)
+  end
+
   def test_empty_value_in_required
     now = Time.now
     input = [
