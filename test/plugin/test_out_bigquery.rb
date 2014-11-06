@@ -87,7 +87,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       time_field  time
 
       field_integer time  , status , bytes 
-      field_string  _log_name, vhost ,path, method,protocol, agent,referer, remote.host ,remote.ip, remote.user
+      field_string  _log_name, vhost, path, method, protocol, agent, referer, remote.host, remote.ip, remote.user
       field_float   requesttime 
       field_boolean bot_access , loginsession 
     ])
