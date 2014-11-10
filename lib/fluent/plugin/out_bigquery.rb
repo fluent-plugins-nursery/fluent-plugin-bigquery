@@ -376,9 +376,10 @@ module Fluent
         ### https://developers.google.com/bigquery/docs/tables
         # Each field has the following properties:
         #
-        # name - Field names are any combination of uppercase and/or lowercase letters (A-Z, a-z),
-        #        digits (0-9) and underscores, but no spaces. The first character must be a letter.
-        unless name =~ /^[A-Za-z][_A-Za-z0-9]*$/
+        # name - The name must contain only letters (a-z, A-Z), numbers (0-9), or underscores (_), 
+        #        and must start with a letter or underscore. The maximum length is 128 characters.
+        #        https://cloud.google.com/bigquery/docs/reference/v2/tables#schema.fields.name
+        unless name =~ /^[_A-Za-z][_A-Za-z0-9]{,127}$/
           raise Fluent::ConfigError, "invalid bigquery field name: '#{name}'"
         end
 

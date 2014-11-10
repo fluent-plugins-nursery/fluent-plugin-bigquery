@@ -87,7 +87,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       time_field  time
 
       field_integer time  , status , bytes 
-      field_string  vhost ,path,method,protocol, agent,referer, remote.host ,remote.ip,remote.user 
+      field_string  _log_name, vhost, path, method, protocol, agent, referer, remote.host, remote.ip, remote.user
       field_float   requesttime 
       field_boolean bot_access , loginsession 
     ])
@@ -97,6 +97,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
     assert fields['time']
     assert fields['status']
     assert fields['bytes']
+    assert fields['_log_name']
     assert fields['vhost']
     assert fields['protocol']
     assert fields['agent']
@@ -129,6 +130,12 @@ class BigQueryOutputTest < Test::Unit::TestCase
     end
     assert_raises(Fluent::ConfigError) do
       create_driver(base + "field_string remote.host name\n")
+    end
+    assert_raises(Fluent::ConfigError) do
+      create_driver(base + "field_string 1column\n")
+    end
+    assert_raises(Fluent::ConfigError) do
+      create_driver(base + "field_string #{'tenstrings' * 12 + '123456789'}\n")
     end
     assert_raises(Fluent::ConfigError) do
       create_driver(base + "field_float request time\n")
