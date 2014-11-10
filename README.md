@@ -249,6 +249,22 @@ If you specify multiple tables in configuration file, plugin get all schema data
 NOTE: Since JSON does not define how to encode data of TIMESTAMP type,
 you are still recommended to specify JSON types for TIMESTAMP fields as "time" field does in the example, if you use second or third method.
 
+### Specifying insertId property
+
+BigQuery uses `insertId` property to detect duplicate insertion requests (see [data consistency](https://cloud.google.com/bigquery/streaming-data-into-bigquery#dataconsistency) in Google BigQuery documents).
+You can set `insert_id_field` option to specify the field to use as `insertId` property.
+
+```apache
+<match dummy>
+  type bigquery
+
+  ...
+
+  insert_id_field uuid
+  field_string uuid
+</match>
+```
+
 ## TODO
 
 * support Load API

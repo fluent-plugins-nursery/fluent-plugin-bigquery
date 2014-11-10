@@ -79,6 +79,8 @@ module Fluent
     config_param :utc, :bool, :default => nil
     config_param :time_field, :string, :default => nil
 
+    config_param :insert_id_field, :string, :default => nil
+
     config_param :method, :string, :default => 'insert' # or 'load' # TODO: not implemented now
 
     config_param :load_size_limit, :integer, :default => 1000**4 # < 1TB (1024^4) # TODO: not implemented now
@@ -197,6 +199,15 @@ module Fluent
       else
         @add_time_field = lambda {|record, time| record }
       end
+
+      if @insert_id_field
+        insert_id_keys = @insert_id_field.split('.')
+        @get_insert_id = lambda {|record|
+          insert_id_keys.inject(record) {|h, k| h[k] }
+        }
+      else
+        @get_insert_id = nil
+      end
     end
 
     def start
@@ -294,7 +305,11 @@ module Fluent
       buf = ''
       es.each do |time, record|
         row = @fields.format(@add_time_field.call(record, time))
-        buf << {"json" => row}.to_msgpack unless row.empty?
+        unless row.empty?
+          row = {"json" => row}
+          row['insertId'] = @get_insert_id.call(record) if @get_insert_id
+          buf << row.to_msgpack
+        end
       end
       buf
     end
