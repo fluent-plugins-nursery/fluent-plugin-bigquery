@@ -61,6 +61,8 @@ module Fluent
     config_param :table, :string, :default => nil
     config_param :tables, :string, :default => nil
 
+    config_param :auto_create_table, :bool, :default => false
+
     config_param :schema_path, :string, :default => nil
     config_param :fetch_schema, :bool, :default => false
     config_param :field_string,  :string, :default => nil
@@ -264,6 +266,44 @@ module Fluent
       current_time.strftime(table_id_format)
     end
 
+    def create_table(table_id)
+      res = client().execute(
+        :api_method => @bq.tables.insert,
+        :parameters => {
+          'projectId' => @project,
+          'datasetId' => @dataset,
+        },
+        :body_object => {
+          'tableReference' => {
+            'tableId' => table_id,
+          },
+          'schema' => {
+            'fields' => @fields.to_a,
+          },
+        }
+      )
+      unless res.success?
+        # api_error? -> client cache clear
+        @cached_client = nil
+
+        message = res.body
+        if res.body =~ /^\{/
+          begin
+            res_obj = JSON.parse(res.body)
+            message = res_obj['error']['message'] || res.body
+          rescue => e
+            log.warn "Parse error: google api error response body", :body => res.body
+          end
+          if res_obj and res_obj['code'] == 409 and /Already Exists:/ =~ message
+            # ignore 'Already Exists' error
+            return
+          end
+        end
+        log.error "tables.insert API", :project_id => @project, :dataset => @dataset, :table => table_id, :code => res.status, :message => message
+        raise "failed to create table in bigquery" # TODO: error class
+      end
+    end
+
     def insert(table_id_format, rows)
       table_id = generate_table_id(table_id_format, Time.at(Fluent::Engine.now))
       res = client().execute(
@@ -288,6 +328,10 @@ module Fluent
             message = res_obj['error']['message'] || res.body
           rescue => e
             log.warn "Parse error: google api error response body", :body => res.body
+          end
+          if @auto_create_table and res_obj and res_obj['error']['code'] == 404 and /Not Found: Table/ =~ message.to_s
+            # Table Not Found: Auto Create Table
+            create_table(table_id)
           end
         end
         log.error "tabledata.insertAll API", :project_id => @project, :dataset => @dataset, :table => table_id, :code => res.status, :message => message
@@ -419,6 +463,14 @@ module Fluent
       def format_one(value)
         raise NotImplementedError, "Must implement in a subclass" 
       end
+
+      def to_h
+        {
+          'name' => name,
+          'type' => type.to_s.upcase,
+          'mode' => mode.to_s.upcase,
+        }
+      end
     end
 
     class StringFieldSchema < FieldSchema
@@ -492,6 +544,12 @@ module Fluent
 
       def [](name)
         @fields[name]
+      end
+
+      def to_a
+        @fields.map do |_, field_schema|
+          field_schema.to_h
+        end
       end
 
       def load_schema(schema, allow_overwrite=true)
