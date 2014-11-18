@@ -552,6 +552,15 @@ module Fluent
         end
       end
 
+      def to_h
+        {
+          'name' => name,
+          'type' => type.to_s.upcase,
+          'mode' => mode.to_s.upcase,
+          'fields' => self.to_a,
+        }
+      end
+
       def load_schema(schema, allow_overwrite=true)
         schema.each do |field|
           raise ConfigError, 'field must have type' unless field.key?('type')

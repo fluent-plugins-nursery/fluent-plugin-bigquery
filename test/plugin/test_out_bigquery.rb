@@ -719,16 +719,29 @@ class BigQueryOutputTest < Test::Unit::TestCase
 
   def test_auto_create_table_by_bigquery_api
     now = Time.now
-    input = [
-      now,
-      {
-        "message" => "Hello BigQuery"
-      }
-    ]
-    expected = {
+    message = {
       "json" => {
         "time" => now.to_i,
-        "message" => "Hello BigQuery",
+        "request" => {
+          "vhost" => "bar",
+          "path" => "/path/to/baz",
+          "method" => "GET",
+          "protocol" => "HTTP/1.0",
+          "agent" => "libwww",
+          "referer" => "http://referer.example",
+          "time" => (now - 1).to_f,
+          "bot_access" => true,
+          "loginsession" => false,
+        },
+        "remote" => {
+          "host" => "remote.example",
+          "ip" =>  "192.168.1.1",
+          "user" => "nagachika",
+        },
+        "response" => {
+          "status" => 200,
+          "bytes" => 72,
+        },
       }
     }
 
@@ -743,8 +756,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       time_field  time
 
       auto_create_table true
-      field_integer time
-      field_string message 
+      schema_path #{File.join(File.dirname(__FILE__), "testdata", "apache.schema")}
     CONFIG
     mock_client(driver) do |expect|
       expect.discovered_api("bigquery", "v2") {
@@ -761,9 +773,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
           'tableId' => 'foo'
         },
         :body_object => {
-          "rows" => [
-            {"json"=>{"messgage"=>"Hello BigQuery"}}
-          ]
+          "rows" => [ message ]
         }
       ) {
         s = stub!
@@ -785,18 +795,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
             'tableId' => 'foo',
           },
           'schema' => {
-            'fields' => [
-              {
-                'name' => 'message',
-                'type' => 'STRING',
-                'mode' => 'NULLABLE',
-              },
-              {
-                'name' => 'time',
-                'type' => 'INTEGER',
-                'mode' => 'NULLABLE',
-              },
-            ]
+            'fields' => JSON.parse(File.read(File.join(File.dirname(__FILE__), "testdata", "apache.schema")))
           }
         }
       ) {
@@ -805,12 +804,11 @@ class BigQueryOutputTest < Test::Unit::TestCase
         s
       }
     end
-    entry = {"json" => {"messgage" => "Hello BigQuery"}}
     chunk = Fluent::MemoryBufferChunk.new("my.tag")
-    chunk << entry.to_msgpack
+    chunk << message.to_msgpack
 
     driver.instance.start
-    assert_raise(RuntimeError, /failed to insert into bigquery/) {
+    assert_raise(RuntimeError) {
       driver.instance.write(chunk)
     }
     driver.instance.shutdown
