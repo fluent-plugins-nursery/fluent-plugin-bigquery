@@ -168,6 +168,8 @@ because there is a time lag between collection and transmission of logs.
 When `auto_create_table` is set to `true`, try to create the table using BigQuery API when insertion failed with code=404 "Not Found: Table ...".
 Next retry of insertion is expected to be success.
 
+NOTE: `auto_create_table` option cannot use with `fetch_schema`. You should create the table on ahead to use `fetch_schema`.
+
 ```apache
 <match dummy>
   type bigquery
