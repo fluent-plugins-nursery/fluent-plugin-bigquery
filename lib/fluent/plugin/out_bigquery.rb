@@ -40,12 +40,12 @@ module Fluent
     # Available methods are:
     # * private_key -- Use service account credential
     # * compute_engine -- Use access token available in instances of ComputeEngine
-    config_param :auth_method, :string, :default => 'private_key'
+    config_param :auth_method, :string, default: 'private_key'
 
     ### Service Account credential
-    config_param :email, :string, :default => nil
-    config_param :private_key_path, :string, :default => nil
-    config_param :private_key_passphrase, :string, :default => 'notasecret'
+    config_param :email, :string, default: nil
+    config_param :private_key_path, :string, default: nil
+    config_param :private_key_passphrase, :string, default: 'notasecret'
 
     # see as simple reference
     #   https://github.com/abronte/BigQuery/blob/master/lib/bigquery.rb
@@ -58,32 +58,32 @@ module Fluent
 
     # table_id
     #   In Table ID, enter a name for your new table. Naming rules are the same as for your dataset.
-    config_param :table, :string, :default => nil
-    config_param :tables, :string, :default => nil
+    config_param :table, :string, default: nil
+    config_param :tables, :string, default: nil
 
-    config_param :schema_path, :string, :default => nil
-    config_param :fetch_schema, :bool, :default => false
-    config_param :field_string,  :string, :default => nil
-    config_param :field_integer, :string, :default => nil
-    config_param :field_float,   :string, :default => nil
-    config_param :field_boolean, :string, :default => nil
-    config_param :field_timestamp, :string, :default => nil
+    config_param :schema_path, :string, default: nil
+    config_param :fetch_schema, :bool, default: false
+    config_param :field_string,  :string, default: nil
+    config_param :field_integer, :string, default: nil
+    config_param :field_float,   :string, default: nil
+    config_param :field_boolean, :string, default: nil
+    config_param :field_timestamp, :string, default: nil
     ### TODO: record field stream inserts doesn't works well?
     ###  At table creation, table type json + field type record -> field type validation fails
     ###  At streaming inserts, schema cannot be specified
-    # config_param :field_record,  :string, :defualt => nil
-    # config_param :optional_data_field, :string, :default => nil
+    # config_param :field_record,  :string, defualt: nil
+    # config_param :optional_data_field, :string, default: nil
 
-    config_param :time_format, :string, :default => nil
-    config_param :localtime, :bool, :default => nil
-    config_param :utc, :bool, :default => nil
-    config_param :time_field, :string, :default => nil
+    config_param :time_format, :string, default: nil
+    config_param :localtime, :bool, default: nil
+    config_param :utc, :bool, default: nil
+    config_param :time_field, :string, default: nil
 
-    config_param :insert_id_field, :string, :default => nil
+    config_param :insert_id_field, :string, default: nil
 
-    config_param :method, :string, :default => 'insert' # or 'load' # TODO: not implemented now
+    config_param :method, :string, default: 'insert' # or 'load' # TODO: not implemented now
 
-    config_param :load_size_limit, :integer, :default => 1000**4 # < 1TB (1024^4) # TODO: not implemented now
+    config_param :load_size_limit, :integer, default: 1000**4 # < 1TB (1024^4) # TODO: not implemented now
     ### method: 'load'
     #   https://developers.google.com/bigquery/loading-data-into-bigquery
     # Maximum File Sizes:
@@ -92,9 +92,9 @@ module Fluent
     #                          Without new-lines in strings: 1 TB
     # JSON        1 GB         1 TB
 
-    config_param :row_size_limit, :integer, :default => 100*1000 # < 100KB # configurable in google ?
-    # config_param :insert_size_limit, :integer, :default => 1000**2 # < 1MB
-    # config_param :rows_per_second_limit, :integer, :default => 1000 # spike limit
+    config_param :row_size_limit, :integer, default: 100*1000 # < 100KB # configurable in google ?
+    # config_param :insert_size_limit, :integer, default: 1000**2 # < 1MB
+    # config_param :rows_per_second_limit, :integer, default: 1000 # spike limit
     ### method: ''Streaming data inserts support
     #  https://developers.google.com/bigquery/streaming-data-into-bigquery#usecases
     # Maximum row size: 100 KB
@@ -232,8 +232,8 @@ module Fluent
       return @cached_client if @cached_client && @cached_client_expiration > Time.now
 
       client = Google::APIClient.new(
-        :application_name => 'Fluentd BigQuery plugin',
-        :application_version => Fluent::BigQueryPlugin::VERSION
+        application_name: 'Fluentd BigQuery plugin',
+        application_version: Fluent::BigQueryPlugin::VERSION
       )
 
       case @auth_method
@@ -267,13 +267,13 @@ module Fluent
     def insert(table_id_format, rows)
       table_id = generate_table_id(table_id_format, Time.at(Fluent::Engine.now))
       res = client().execute(
-        :api_method => @bq.tabledata.insert_all,
-        :parameters => {
+        api_method: @bq.tabledata.insert_all,
+        parameters: {
           'projectId' => @project,
           'datasetId' => @dataset,
           'tableId' => table_id,
         },
-        :body_object => {
+        body_object: {
           "rows" => rows
         }
       )
@@ -287,10 +287,10 @@ module Fluent
             res_obj = JSON.parse(res.body)
             message = res_obj['error']['message'] || res.body
           rescue => e
-            log.warn "Parse error: google api error response body", :body => res.body
+            log.warn "Parse error: google api error response body", body: res.body
           end
         end
-        log.error "tabledata.insertAll API", :project_id => @project, :dataset => @dataset, :table => table_id, :code => res.status, :message => message
+        log.error "tabledata.insertAll API", project_id: @project, dataset: @dataset, table: table_id, code: res.status, message: message
         raise "failed to insert into bigquery" # TODO: error class
       end
     end
@@ -335,8 +335,8 @@ module Fluent
       table_id_format = @tablelist[0]
       table_id = generate_table_id(table_id_format, Time.at(Fluent::Engine.now))
       res = client.execute(
-        :api_method => @bq.tables.get,
-        :parameters => {
+        api_method: @bq.tables.get,
+        parameters: {
           'projectId' => @project,
           'datasetId' => @dataset,
           'tableId' => table_id,
@@ -353,10 +353,10 @@ module Fluent
             res_obj = JSON.parse(res.body)
             message = res_obj['error']['message'] || res.body
           rescue => e
-            log.warn "Parse error: google api error response body", :body => res.body
+            log.warn "Parse error: google api error response body", body: res.body
           end
         end
-        log.error "tables.get API", :project_id => @project, :dataset => @dataset, :table => table_id, :code => res.status, :message => message
+        log.error "tables.get API", project_id: @project, dataset: @dataset, table: table_id, code: res.status, message: message
         raise "failed to fetch schema from bigquery" # TODO: error class
       end
 
@@ -370,14 +370,14 @@ module Fluent
     #   raise NotImplementedError, "OAuth needs browser authentication..."
     #
     #   client = Google::APIClient.new(
-    #     :application_name => 'Example Ruby application',
-    #     :application_version => '1.0.0'
+    #     application_name: 'Example Ruby application',
+    #     application_version: '1.0.0'
     #   )
     #   bigquery = client.discovered_api('bigquery', 'v2')
     #   flow = Google::APIClient::InstalledAppFlow.new(
-    #     :client_id => @client_id
-    #     :client_secret => @client_secret
-    #     :scope => ['https://www.googleapis.com/auth/bigquery']
+    #     client_id: @client_id
+    #     client_secret: @client_secret
+    #     scope: ['https://www.googleapis.com/auth/bigquery']
     #   )
     #   client.authorization = flow.authorize # browser authentication !
     #   client
@@ -473,12 +473,12 @@ module Fluent
 
     class RecordSchema < FieldSchema
       FIELD_TYPES = {
-        :string => StringFieldSchema,
-        :integer => IntegerFieldSchema,
-        :float => FloatFieldSchema,
-        :boolean => BooleanFieldSchema,
-        :timestamp => TimestampFieldSchema,
-        :record => RecordSchema
+        string: StringFieldSchema,
+        integer: IntegerFieldSchema,
+        float: FloatFieldSchema,
+        boolean: BooleanFieldSchema,
+        timestamp: TimestampFieldSchema,
+        record: RecordSchema
       }.freeze
 
       def initialize(name, mode = :nullable)
