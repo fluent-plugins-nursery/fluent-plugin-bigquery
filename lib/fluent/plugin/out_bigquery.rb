@@ -137,7 +137,7 @@ module Fluent
 
       case @auth_method
       when 'private_key'
-        if !@email || !@private_key_path
+        unless @email && @private_key_path
           raise Fluent::ConfigError, "'email' and 'private_key_path' must be specified if auth_method == 'private_key'"
         end
       when 'compute_engine'
@@ -146,7 +146,7 @@ module Fluent
         raise Fluent::ConfigError, "unrecognized 'auth_method': #{@auth_method}"
       end
 
-      if (!@table && !@tables) || (@table && @tables)
+      unless @table.nil? ^ @tables.nil?
         raise Fluent::ConfigError, "'table' or 'tables' must be specified, and both are invalid"
       end
 
