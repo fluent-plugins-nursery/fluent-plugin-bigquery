@@ -223,11 +223,6 @@ module Fluent
       fetch_schema() if @fetch_schema
     end
 
-    def shutdown
-      super
-      # nothing to do
-    end
-
     def client
       return @cached_client if @cached_client && @cached_client_expiration > Time.now
 
