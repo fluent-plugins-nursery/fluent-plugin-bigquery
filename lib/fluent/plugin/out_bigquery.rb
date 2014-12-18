@@ -192,17 +192,17 @@ module Fluent
       if @time_field
         keys = @time_field.split('.')
         last_key = keys.pop
-        @add_time_field = lambda {|record, time|
+        @add_time_field = ->(record, time) {
           keys.inject(record) { |h, k| h[k] ||= {} }[last_key] = @timef.format(time)
           record
         }
       else
-        @add_time_field = lambda {|record, time| record }
+        @add_time_field = ->(record, time) { record }
       end
 
       if @insert_id_field
         insert_id_keys = @insert_id_field.split('.')
-        @get_insert_id = lambda {|record|
+        @get_insert_id = ->(record) {
           insert_id_keys.inject(record) {|h, k| h[k] }
         }
       else
