@@ -21,11 +21,7 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "rake"
   spec.add_development_dependency "rr"
 
-  # Lock retriable to 1.4.x. Because 2.X API breaks backward compatibility.
-  # see https://github.com/google/google-api-ruby-client/issues/164
-  spec.add_runtime_dependency "retriable", "~> 1.4" 
-
-  spec.add_runtime_dependency "google-api-client", "~> 0.7.1"
+  spec.add_runtime_dependency "google-api-client", "~> 0.8.0"
   spec.add_runtime_dependency "fluentd"
   spec.add_runtime_dependency "fluent-mixin-plaintextformatter", '>= 0.2.1'
   spec.add_runtime_dependency "fluent-mixin-config-placeholders", ">= 0.3.0"
