@@ -256,16 +256,7 @@ module Fluent
       unless res.success?
         # api_error? -> client cache clear
         @cached_client = nil
-
-        message = res.body
-        if res.body =~ /^\{/
-          begin
-            res_obj = JSON.parse(res.body)
-            message = res_obj['error']['message'] || res.body
-          rescue => e
-            log.warn "Parse error: google api error response body", body: res.body
-          end
-        end
+        message = extract_error_message(res.body)
         log.error "tabledata.insertAll API", project_id: @project, dataset: @dataset, table: table_id, code: res.status, message: message
         raise "failed to insert into bigquery" # TODO: error class
       end
@@ -322,16 +313,7 @@ module Fluent
       unless res.success?
         # api_error? -> client cache clear
         @cached_client = nil
-
-        message = res.body
-        if res.body =~ /^\{/
-          begin
-            res_obj = JSON.parse(res.body)
-            message = res_obj['error']['message'] || res.body
-          rescue => e
-            log.warn "Parse error: google api error response body", body: res.body
-          end
-        end
+        message = extract_error_message(res.body)
         log.error "tables.get API", project_id: @project, dataset: @dataset, table: table_id, code: res.status, message: message
         raise "failed to fetch schema from bigquery" # TODO: error class
       end
@@ -358,6 +340,14 @@ module Fluent
     #   client.authorization = flow.authorize # browser authentication !
     #   client
     # end
+
+    def extract_error_message(response_body)
+      return response_body unless response_body =~ /^\{/
+      JSON.parse(response_body)['error']['message'] || response_body
+    rescue
+      log.warn "Parse error: google api error response body", body: response_body
+      response_body
+    end
 
     class FieldSchema
       def initialize(name, mode = :nullable)
