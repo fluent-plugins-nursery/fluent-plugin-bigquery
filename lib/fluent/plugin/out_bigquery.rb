@@ -166,11 +166,8 @@ module Fluent
         end
       end
 
-      if @localtime.nil?
-        if @utc
-          @localtime = false
-        end
-      end
+      @localtime = false if @localtime.nil? && @utc
+
       @timef = TimeFormatter.new(@time_format, @localtime)
 
       if @time_field
