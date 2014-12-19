@@ -156,29 +156,13 @@ module Fluent
       if @schema_path
         @fields.load_schema(JSON.parse(File.read(@schema_path)))
       end
-      if @field_string
-        @field_string.split(',').each do |fieldname|
-          @fields.register_field fieldname.strip, :string
-        end
-      end
-      if @field_integer
-        @field_integer.split(',').each do |fieldname|
-          @fields.register_field fieldname.strip, :integer
-        end
-      end
-      if @field_float
-        @field_float.split(',').each do |fieldname|
-          @fields.register_field fieldname.strip, :float
-        end
-      end
-      if @field_boolean
-        @field_boolean.split(',').each do |fieldname|
-          @fields.register_field fieldname.strip, :boolean
-        end
-      end
-      if @field_timestamp
-        @field_timestamp.split(',').each do |fieldname|
-          @fields.register_field fieldname.strip, :timestamp
+
+      types = %w(string integer float boolean timestamp)
+      types.each do |type|
+        raw_fields = instance_variable_get("@field_#{type}")
+        next unless raw_fields
+        raw_fields.split(',').each do |field|
+          @fields.register_field field.strip, type.to_sym
         end
       end
 
