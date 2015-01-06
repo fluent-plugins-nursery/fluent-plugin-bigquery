@@ -677,7 +677,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       expect.discovered_api("bigquery", "v2") { stub! }
     end
     driver.instance.start
-    assert_raises(RuntimeError, /cannot be null/) do
+    assert_raises(RuntimeError.new("Required field user cannot be null")) do
       driver.instance.format_stream("my.tag", [input])
     end
     driver.instance.shutdown

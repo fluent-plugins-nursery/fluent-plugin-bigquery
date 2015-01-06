@@ -20,7 +20,10 @@ Gem::Specification.new do |spec|
 
   spec.add_development_dependency "rake"
   spec.add_development_dependency "rr"
-  spec.add_runtime_dependency "google-api-client", "~> 0.7.1"
+  spec.add_development_dependency "test-unit", "~> 3.0.2"
+  spec.add_development_dependency "test-unit-rr", "~> 1.0.3"
+
+  spec.add_runtime_dependency "google-api-client", "~> 0.8.0"
   spec.add_runtime_dependency "fluentd"
   spec.add_runtime_dependency "fluent-mixin-plaintextformatter", '>= 0.2.1'
   spec.add_runtime_dependency "fluent-mixin-config-placeholders", ">= 0.3.0"
