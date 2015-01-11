@@ -717,6 +717,103 @@ class BigQueryOutputTest < Test::Unit::TestCase
     assert_equal 'foo_2014_08_11', table_id
   end
 
+  def test_auto_create_table_by_bigquery_api
+    now = Time.now
+    message = {
+      "json" => {
+        "time" => now.to_i,
+        "request" => {
+          "vhost" => "bar",
+          "path" => "/path/to/baz",
+          "method" => "GET",
+          "protocol" => "HTTP/1.0",
+          "agent" => "libwww",
+          "referer" => "http://referer.example",
+          "time" => (now - 1).to_f,
+          "bot_access" => true,
+          "loginsession" => false,
+        },
+        "remote" => {
+          "host" => "remote.example",
+          "ip" =>  "192.168.1.1",
+          "user" => "nagachika",
+        },
+        "response" => {
+          "status" => 200,
+          "bytes" => 72,
+        },
+      }
+    }
+
+    driver = create_driver(<<-CONFIG)
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      time_format %s
+      time_field  time
+
+      auto_create_table true
+      schema_path #{File.join(File.dirname(__FILE__), "testdata", "apache.schema")}
+    CONFIG
+    mock_client(driver) do |expect|
+      expect.discovered_api("bigquery", "v2") {
+        mock! {
+          tables.mock!.insert { Object.new }
+          tabledata.mock!.insert_all { Object.new }
+        }
+      }
+      expect.execute(
+        :api_method => anything,
+        :parameters => {
+          'projectId' => 'yourproject_id',
+          'datasetId' => 'yourdataset_id',
+          'tableId' => 'foo'
+        },
+        :body_object => {
+          "rows" => [ message ]
+        }
+      ) {
+        s = stub!
+        s.success? { false }
+        s.body { JSON.generate({
+          'error' => { "code" => 404, "message" => "Not Found: Table yourproject_id:yourdataset_id.foo" }
+        }) }
+        s.status { 404 }
+        s
+      }
+      expect.execute(
+        :api_method => anything,
+        :parameters => {
+          'projectId' => 'yourproject_id',
+          'datasetId' => 'yourdataset_id',
+        },
+        :body_object => {
+          'tableReference' => {
+            'tableId' => 'foo',
+          },
+          'schema' => {
+            'fields' => JSON.parse(File.read(File.join(File.dirname(__FILE__), "testdata", "apache.schema")))
+          }
+        }
+      ) {
+        s = stub!
+        s.success? { true }
+        s
+      }
+    end
+    chunk = Fluent::MemoryBufferChunk.new("my.tag")
+    chunk << message.to_msgpack
+
+    driver.instance.start
+    assert_raise(RuntimeError) {
+      driver.instance.write(chunk)
+    }
+    driver.instance.shutdown
+  end
+
   private
 
   def sudo_schema_response
