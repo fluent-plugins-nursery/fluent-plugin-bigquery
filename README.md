@@ -84,9 +84,8 @@ Important options for high rate events are:
     * `out_bigquery` uses these tables for Table Sharding inserts
     * these must have same schema
   * `buffer_chunk_records_limit`
-    * number of records over streaming inserts API call is limited as 100, per second, per table
-    * default average rate limit is 100, and spike rate limit is 1000
-    * `out_bigquery` flushes buffer with 100 records for 1 inserts API call
+    * number of records over streaming inserts API call is limited as 500, per insert or chunk
+    * `out_bigquery` flushes buffer with 500 records for 1 inserts API call
   * `buffer_queue_limit`
     * BigQuery streaming inserts needs very small buffer chunks
     * for high-rate events, `buffer_queue_limit` should be configured with big number
