@@ -97,8 +97,8 @@ Important options for high rate events are:
     * 10 or more threads seems good for inserts over internet
     * less threads may be good for Google Compute Engine instances (with low latency for BigQuery)
   * `flush_interval`
-    * `1` is lowest value, without patches on Fluentd v0.10.41 or earlier
-    * see `patches` below
+    * interval between data flushes (default 0.25)
+    * you can set subsecond values such as `0.15` on Fluentd v0.10.42 or later
 
 ### Authentication
 
