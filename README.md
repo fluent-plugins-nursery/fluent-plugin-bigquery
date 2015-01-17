@@ -100,6 +100,9 @@ Important options for high rate events are:
     * interval between data flushes (default 0.25)
     * you can set subsecond values such as `0.15` on Fluentd v0.10.42 or later
 
+See [Quota policy](https://cloud.google.com/bigquery/streaming-data-into-bigquery#quota)
+section in the Google BigQuery document.
+
 ### Authentication
 
 There are two methods supported to fetch access token for the service account.
