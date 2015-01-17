@@ -83,6 +83,9 @@ Important options for high rate events are:
     * 2 or more tables are available with ',' separator
     * `out_bigquery` uses these tables for Table Sharding inserts
     * these must have same schema
+  * `buffer_chunk_limit`
+    * max size of an insert or chunk (default 1000000 or 1MB)
+    * the max size is limited to 1MB on BigQuery
   * `buffer_chunk_records_limit`
     * number of records over streaming inserts API call is limited as 500, per insert or chunk
     * `out_bigquery` flushes buffer with 500 records for 1 inserts API call
