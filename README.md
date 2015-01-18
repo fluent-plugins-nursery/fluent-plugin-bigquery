@@ -83,10 +83,12 @@ Important options for high rate events are:
     * 2 or more tables are available with ',' separator
     * `out_bigquery` uses these tables for Table Sharding inserts
     * these must have same schema
+  * `buffer_chunk_limit`
+    * max size of an insert or chunk (default 1000000 or 1MB)
+    * the max size is limited to 1MB on BigQuery
   * `buffer_chunk_records_limit`
-    * number of records over streaming inserts API call is limited as 100, per second, per table
-    * default average rate limit is 100, and spike rate limit is 1000
-    * `out_bigquery` flushes buffer with 100 records for 1 inserts API call
+    * number of records over streaming inserts API call is limited as 500, per insert or chunk
+    * `out_bigquery` flushes buffer with 500 records for 1 inserts API call
   * `buffer_queue_limit`
     * BigQuery streaming inserts needs very small buffer chunks
     * for high-rate events, `buffer_queue_limit` should be configured with big number
@@ -98,8 +100,11 @@ Important options for high rate events are:
     * 10 or more threads seems good for inserts over internet
     * less threads may be good for Google Compute Engine instances (with low latency for BigQuery)
   * `flush_interval`
-    * `1` is lowest value, without patches on Fluentd v0.10.41 or earlier
-    * see `patches` below
+    * interval between data flushes (default 0.25)
+    * you can set subsecond values such as `0.15` on Fluentd v0.10.42 or later
+
+See [Quota policy](https://cloud.google.com/bigquery/streaming-data-into-bigquery#quota)
+section in the Google BigQuery document.
 
 ### Authentication
 
