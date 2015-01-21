@@ -94,6 +94,9 @@ module Fluent
     #                          Without new-lines in strings: 1 TB
     # JSON        1 GB         1 TB
 
+    #config_param :load_configuration, :hash, default: {} # use v1config (for now, comment out)
+    config_param :sync_load_job, :bool, default: true # wait until load job is done
+
     config_param :row_size_limit, :integer, default: 100*1000 # < 100KB # configurable in google ?
     # config_param :insert_size_limit, :integer, default: 1000**2 # < 1MB
     # config_param :rows_per_second_limit, :integer, default: 1000 # spike limit
@@ -191,6 +194,12 @@ module Fluent
       else
         @get_insert_id = nil
       end
+
+      if @method == "load"
+        raise Fluent::ConfigError, "load method supports 'buffer_type file' only" unless @buffer_type == "file"
+      end
+
+      @load_configuration = {}
     end
 
     def start
@@ -310,9 +319,89 @@ module Fluent
       end
     end
 
-    def load
-      # https://developers.google.com/bigquery/loading-data-into-bigquery#loaddatapostrequest
-      raise NotImplementedError # TODO
+    def load(table_id_format, chunk)
+      wait_load_job_file = "#{chunk.path}.wait"
+      unless File.exist? wait_load_job_file
+        table_id = generate_table_id(table_id_format, Time.at(Fluent::Engine.now))
+
+        @load_configuration['destinationTable'] = {
+          'projectId' => @project,
+          'datasetId' => @dataset,
+          'tableId' => table_id
+        }
+        @load_configuration['schema'] = { 'fields' => @fields.to_a }
+        @load_configuration['sourceFormat'] = 'NEWLINE_DELIMITED_JSON'
+
+        buf_file = File.open(chunk.path)
+        media = Google::APIClient::UploadIO.new(buf_file, 'application/octet-stream')
+        res = client().execute(
+          api_method: @bq.jobs.insert,
+          parameters: {
+            'projectId' => @project,
+            'uploadType' => 'multipart'
+          },
+          body_object: {
+            'configuration' => {
+              'load' => @load_configuration
+            }
+          },
+          media: media
+        )
+        buf_file.close
+
+        res_obj = extract_response_obj(res.body)
+        if res.success?
+          job_id = res_obj['jobReference']['jobId']
+          if @sync_load_job
+            File.open(chunk.path + ".wait", "w") {|f| f.write "#{job_id}"}
+            raise Fluent::BigQueryOutput::LoadJobSyncWait, project_id: @project, dataset: @dataset, table: table_id, job_id: job_id, chunk_path: chunk.path
+          else
+            log.info "DONE jobs.insert (load) API", project_id: @project, dataset: @dataset, table: table_id, job_id: job_id, chunk_path: chunk.path
+            return
+          end
+        else
+          # api_error? -> client cache clear
+          @cached_client = nil
+
+          message = res_obj['error']['message'] || res.body
+          log.error "jobs.insert (load) API", project_id: @project, dataset: @dataset, table: table_id, code: res.status, message: message
+          raise "failed to load into bigquery" # TODO: error class
+        end
+      else
+        job_id = File.open(wait_load_job_file) {|f| f.read}
+
+        res = client().execute(
+          api_method: @bq.jobs.get,
+          parameters: {
+            'projectId' => @project,
+            'jobId' => job_id
+          }
+        )
+
+        res_obj = extract_response_obj(res.body)
+        if res.success?
+          if res_obj['status']['state'] == 'DONE'
+            unless res_obj['status']['errorResult']
+              log.info "DONE jobs.insert (load) API", project_id: @project, dataset: @dataset, table: table_id, job_id: job_id, chunk_path: chunk.path
+              File.unlink wait_load_job_file if File.exist? wait_load_job_file
+              return
+            else
+              message = res_obj['status']['errorResult']['message']
+              log.error "jobs.inset (load) API", project_id: @project, dataset: @dataset, table: table_id, job_id: job_id, chunk_path: chunk.path, state: res_obj['status']['state'], message: message, errors: res_obj['status']['errors']
+              raise "failed to load into bigquery" # TODO: error class
+            end
+          else
+            raise Fluent::BigQueryOutput::LoadJobSyncWait, project_id: @project, dataset: @dataset, table: table_id, job_id: job_id, chunk_path: chunk.path, state: res_obj['status']['state']
+          end
+        else
+          # api_error? -> client cache clear
+          @cached_client = nil
+
+          message = res_obj['error']['message'] || res.body
+          log.error "jobs.get API", project_id: @project, job_id: job_id, code: res.status, message: message
+          raise "failed to get a bigquery job status" # TODO: error class
+        end
+      end
     end
 
     def format_stream(tag, es)
@@ -321,29 +410,35 @@ module Fluent
       es.each do |time, record|
         row = @fields.format(@add_time_field.call(record, time))
         unless row.empty?
-          row = {"json" => row}
-          row['insertId'] = @get_insert_id.call(record) if @get_insert_id
-          buf << row.to_msgpack
+          if @method == "load"
+            buf << row.to_json + "\n"
+          else
+            row = {"json" => row}
+            row['insertId'] = @get_insert_id.call(record) if @get_insert_id
+            buf << row.to_msgpack
+          end
         end
       end
       buf
     end
 
     def write(chunk)
-      rows = []
-      chunk.msgpack_each do |row_object|
-        # TODO: row size limit
-        rows << row_object
-      end
-
-      # TODO: method
-
       insert_table = @tables_mutex.synchronize do
         t = @tables_queue.shift
         @tables_queue.push t
         t
       end
-      insert(insert_table, rows)
+
+      if @method == "load"
+        load(insert_table, chunk)
+      else
+        rows = []
+        chunk.msgpack_each do |row_object|
+          # TODO: row size limit
+          rows << row_object
+        end
+        insert(insert_table, rows)
+      end
     end
 
     def fetch_schema
@@ -595,6 +690,12 @@ module Fluent
             raise ConfigError, "field #{name} is required to be a record but already registered as #{@field[name]}"
           end
         end
+      end
+    end
+
+    class LoadJobSyncWait < StandardError
+      def backtrace
+        ["suppress backtrace"]
       end
     end
   end
