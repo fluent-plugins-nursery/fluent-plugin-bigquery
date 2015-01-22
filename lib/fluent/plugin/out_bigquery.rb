@@ -381,9 +381,9 @@ module Fluent
         res_obj = extract_response_obj(res.body)
         if res.success?
           if res_obj['status']['state'] == 'DONE'
+            File.unlink wait_load_job_file if File.exist? wait_load_job_file
             unless res_obj['status']['errorResult']
               log.info "DONE jobs.insert (load) API", project_id: @project, dataset: @dataset, table: table_id, job_id: job_id, chunk_path: chunk.path
-              File.unlink wait_load_job_file if File.exist? wait_load_job_file
               return
             else
               message = res_obj['status']['errorResult']['message']
