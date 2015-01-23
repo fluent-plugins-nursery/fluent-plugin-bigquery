@@ -293,7 +293,6 @@ You can set `insert_id_field` option to specify the field to use as `insertId` p
 * support NULLABLE/REQUIRED/REPEATED field options in field list style of configuration
 * OAuth installed application credentials support
 * Google API discovery expiration
-* Error classes
 * check row size limits
 
 ## Authors
