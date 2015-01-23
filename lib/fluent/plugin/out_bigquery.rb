@@ -5,6 +5,9 @@ require 'fluent/plugin/bigquery/version'
 require 'fluent/mixin/config_placeholders'
 require 'fluent/mixin/plaintextformatter'
 
+require 'fluent/plugin/bigquery/errors'
+require 'fluent/plugin/bigquery/bigquery_client'
+
 ## TODO: load implementation
 # require 'fluent/plugin/bigquery/load_request_body_wrapper'
 
@@ -120,15 +123,6 @@ module Fluent
     # REQUIRED - The cell cannot be null.
     # REPEATED - Zero or more repeated simple or nested subfields. This mode is only supported when using JSON source files.
 
-    def initialize
-      super
-      require 'json'
-      require 'google/api_client'
-      require 'google/api_client/client_secrets'
-      require 'google/api_client/auth/installed_app'
-      require 'google/api_client/auth/compute_service_account'
-    end
-
     # Define `log` method for v0.10.42 or earlier
     unless method_defined?(:log)
       define_method("log") { $log }
@@ -196,118 +190,43 @@ module Fluent
     def start
       super
 
-      @bq = client.discovered_api("bigquery", "v2") # TODO: refresh with specified expiration
-      @cached_client = nil
-      @cached_client_expiration = nil
-
       @tables_queue = @tablelist.dup.shuffle
       @tables_mutex = Mutex.new
 
-      fetch_schema() if @fetch_schema
-    end
-
-    def client
-      return @cached_client if @cached_client && @cached_client_expiration > Time.now
-
-      client = Google::APIClient.new(
-        application_name: 'Fluentd BigQuery plugin',
-        application_version: Fluent::BigQueryPlugin::VERSION
-      )
-
-      case @auth_method
-      when 'private_key'
-        key = Google::APIClient::PKCS12.load_key( @private_key_path, @private_key_passphrase )
-        asserter = Google::APIClient::JWTAsserter.new(
-          @email,
-          "https://www.googleapis.com/auth/bigquery",
-          key
+      @client =
+        BigQueryPlugin::BigQueryClient.new(
+          project:                @project,
+          dataset:                @dataset,
+          email:                  @email,
+          private_key_path:       @private_key_path,
+          private_key_passphrase: @private_key_passphrase,
+          auth_method:            @auth_method
         )
-        # refresh_auth
-        client.authorization = asserter.authorize
 
-      when 'compute_engine'
-        auth = Google::APIClient::ComputeServiceAccount.new
-        auth.fetch_access_token!
-        client.authorization = auth
-
-      else
-        raise ConfigError, "Unknown auth method: #{@auth_method}"
+      if @fetch_schema
+        table = generate_table_id(@tablelist.first, Time.now)
+        schema = @client.fetch_schema(table)
+        log.debug "Load schema from BigQuery: #{@project}:#{@dataset}.#{table} #{schema}"
+        @fields.load_schema(schema, false)
       end
-
-      @cached_client_expiration = Time.now + 1800
-      @cached_client = client
+    rescue Fluent::BigQueryPlugin::BigQueryAPIError => error
+      log.error "tables.get API", project_id: @project, dataset: @dataset, table: table, error: error.class.to_s, message: error.to_s
+      raise error
     end
 
     def generate_table_id(table_id_format, current_time)
       current_time.strftime(table_id_format)
     end
 
-    def create_table(table_id)
-      res = client().execute(
-        :api_method => @bq.tables.insert,
-        :parameters => {
-          'projectId' => @project,
-          'datasetId' => @dataset,
-        },
-        :body_object => {
-          'tableReference' => {
-            'tableId' => table_id,
-          },
-          'schema' => {
-            'fields' => @fields.to_a,
-          },
-        }
-      )
-      unless res.success?
-        # api_error? -> client cache clear
-        @cached_client = nil
-
-        message = res.body
-        if res.body =~ /^\{/
-          begin
-            res_obj = JSON.parse(res.body)
-            message = res_obj['error']['message'] || res.body
-          rescue => e
-            log.warn "Parse error: google api error response body", :body => res.body
-          end
-          if res_obj and res_obj['code'] == 409 and /Already Exists:/ =~ message
-            # ignore 'Already Exists' error
-            return
-          end
-        end
-        log.error "tables.insert API", :project_id => @project, :dataset => @dataset, :table => table_id, :code => res.status, :message => message
-        raise "failed to create table in bigquery" # TODO: error class
-      end
-    end
-
-    def insert(table_id_format, rows)
-      table_id = generate_table_id(table_id_format, Time.at(Fluent::Engine.now))
-      res = client().execute(
-        api_method: @bq.tabledata.insert_all,
-        parameters: {
-          'projectId' => @project,
-          'datasetId' => @dataset,
-          'tableId' => table_id,
-        },
-        body_object: {
-          "rows" => rows
-        }
-      )
-      unless res.success?
-        # api_error? -> client cache clear
-        @cached_client = nil
-
-        res_obj = extract_response_obj(res.body)
-        message = res_obj['error']['message'] || res.body
-        if res_obj
-          if @auto_create_table and res_obj and res_obj['error']['code'] == 404 and /Not Found: Table/ =~ message.to_s
-            # Table Not Found: Auto Create Table
-            create_table(table_id)
-          end
-        end
-        log.error "tabledata.insertAll API", project_id: @project, dataset: @dataset, table: table_id, code: res.status, message: message
-        raise "failed to insert into bigquery" # TODO: error class
-      end
+    def create_table(table)
+      @client.create_table(table, @fields.to_a)
+    rescue Fluent::BigQueryPlugin::Conflict => error
+      return if /Already Exists:/ =~ error.to_s
+      log.error "tables.insert API", project_id: @project, dataset: @dataset, table: table, error: error.class.to_s, message: error.to_s
+      raise error
+    rescue Fluent::BigQueryPlugin::BigQueryAPIError => error
+      log.error "tables.insert API", project_id: @project, dataset: @dataset, table: table, error: error.class.to_s, message: error.to_s
+      raise error
     end
 
     def load
@@ -343,64 +262,17 @@ module Fluent
         @tables_queue.push t
         t
       end
-      insert(insert_table, rows)
-    end
 
-    def fetch_schema
-      table_id_format = @tablelist[0]
-      table_id = generate_table_id(table_id_format, Time.at(Fluent::Engine.now))
-      res = client.execute(
-        api_method: @bq.tables.get,
-        parameters: {
-          'projectId' => @project,
-          'datasetId' => @dataset,
-          'tableId' => table_id,
-        }
-      )
-
-      unless res.success?
-        # api_error? -> client cache clear
-        @cached_client = nil
-        message = extract_error_message(res.body)
-        log.error "tables.get API", project_id: @project, dataset: @dataset, table: table_id, code: res.status, message: message
-        raise "failed to fetch schema from bigquery" # TODO: error class
-      end
-
-      res_obj = JSON.parse(res.body)
-      schema = res_obj['schema']['fields']
-      log.debug "Load schema from BigQuery: #{@project}:#{@dataset}.#{table_id} #{schema}"
-      @fields.load_schema(schema, false)
-    end
-
-    # def client_oauth # not implemented
-    #   raise NotImplementedError, "OAuth needs browser authentication..."
-    #
-    #   client = Google::APIClient.new(
-    #     application_name: 'Example Ruby application',
-    #     application_version: '1.0.0'
-    #   )
-    #   bigquery = client.discovered_api('bigquery', 'v2')
-    #   flow = Google::APIClient::InstalledAppFlow.new(
-    #     client_id: @client_id
-    #     client_secret: @client_secret
-    #     scope: ['https://www.googleapis.com/auth/bigquery']
-    #   )
-    #   client.authorization = flow.authorize # browser authentication !
-    #   client
-    # end
-
-    def extract_response_obj(response_body)
-      return nil unless response_body =~ /^\{/
-      JSON.parse(response_body)
-    rescue
-      log.warn "Parse error: google api error response body", body: response_body
-      return nil
-    end
-
-    def extract_error_message(response_body)
-      res_obj = extract_response_obj(response_body)
-      return response_body if res_obj.nil?
-      res_obj['error']['message'] || response_body
+      table = generate_table_id(insert_table, Time.now)
+      @client.insert(table, rows)
+    rescue Fluent::BigQueryPlugin::NotFound => error
+      # Table Not Found: Auto Create Table
+      create_table(table) if @auto_create_table && (/Not Found: Table/ =~ error.to_s)
+      log.error "tabledata.insertAll API", project_id: @project, dataset: @dataset, table: table, error: error.class.to_s, message: error.to_s
+      raise error
+    rescue Fluent::BigQueryPlugin::BigQueryAPIError => error
+      log.error "tabledata.insertAll API", project_id: @project, dataset: @dataset, table: table, error: error.class.to_s, message: error.to_s
+      raise error
     end
 
     class FieldSchema
