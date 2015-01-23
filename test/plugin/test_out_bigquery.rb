@@ -54,10 +54,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
       time_format %s
       time_field  time
 
-      field_integer time  , status , bytes 
+      field_integer time  , status , bytes
       field_string  _log_name, vhost, path, method, protocol, agent, referer, remote.host, remote.ip, remote.user
-      field_float   requesttime 
-      field_boolean bot_access , loginsession 
+      field_float   requesttime
+      field_boolean bot_access , loginsession
     ])
     fields = driver.instance.instance_eval{ @fields }
 
@@ -251,6 +251,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       field_integer metadata.time
       field_string  metadata.node,log
     CONFIG
+
     driver.instance.start
     buf = driver.instance.format_stream("my.tag", [input])
     driver.instance.shutdown
@@ -330,6 +331,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       schema_path #{File.join(File.dirname(__FILE__), "testdata", "apache.schema")}
       field_integer time
     CONFIG
+
     driver.instance.start
     buf = driver.instance.format_stream("my.tag", [input])
     driver.instance.shutdown
@@ -370,6 +372,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       schema_path #{File.join(File.dirname(__FILE__), "testdata", "sudo.schema")}
       field_integer time
     CONFIG
+
     driver.instance.start
     buf = driver.instance.format_stream("my.tag", [input])
     driver.instance.shutdown
@@ -414,6 +417,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
     stub(Fluent::BigQueryPlugin::BigQueryClient).new do
       mock(Object.new).fetch_schema('foo') { sudo_schema_response }
     end
+
     driver.instance.start
     buf = driver.instance.format_stream("my.tag", [input])
     driver.instance.shutdown
@@ -428,7 +432,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
     assert fields["tty"]
     assert_equal :string, fields["tty"].type
     assert_equal :nullable, fields["tty"].mode
-    
+
     assert fields["pwd"]
     assert_equal :string, fields["pwd"].type
     assert_equal :required, fields["pwd"].mode
@@ -480,6 +484,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
     stub(Fluent::BigQueryPlugin::BigQueryClient).new do
       mock(Object.new).fetch_schema(table) { sudo_schema_response }
     end
+
     driver.instance.start
     buf = driver.instance.format_stream("my.tag", [input])
     driver.instance.shutdown
@@ -494,7 +499,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
     assert fields["tty"]
     assert_equal :string, fields["tty"].type
     assert_equal :nullable, fields["tty"].mode
-    
+
     assert fields["pwd"]
     assert_equal :string, fields["pwd"].type
     assert_equal :required, fields["pwd"].mode
@@ -533,6 +538,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       insert_id_field uuid
       field_string uuid
     CONFIG
+
     driver.instance.start
     buf = driver.instance.format_stream("my.tag", [input])
     driver.instance.shutdown
@@ -569,6 +575,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       insert_id_field data.uuid
       field_string data.uuid
     CONFIG
+
     driver.instance.start
     buf = driver.instance.format_stream("my.tag", [input])
     driver.instance.shutdown
@@ -601,6 +608,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       schema_path #{File.join(File.dirname(__FILE__), "testdata", "sudo.schema")}
       field_integer time
     CONFIG
+
     driver.instance.start
     assert_raises(RuntimeError.new("Required field user cannot be null")) do
       driver.instance.format_stream("my.tag", [input])
@@ -677,6 +685,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       auto_create_table true
       schema_path #{File.join(File.dirname(__FILE__), "testdata", "apache.schema")}
     CONFIG
+
     chunk = Fluent::MemoryBufferChunk.new("my.tag")
     chunk << message.to_msgpack
 
