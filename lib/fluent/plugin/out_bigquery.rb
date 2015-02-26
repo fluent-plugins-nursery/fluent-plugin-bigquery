@@ -96,6 +96,7 @@ module Fluent
 
     #config_param :load_configuration, :hash, default: {} # use v1config (for now, comment out)
     config_param :sync_load_job, :bool, default: true # wait until load job is done
+    config_param :request_timeout, :integer, default: 60
 
     config_param :row_size_limit, :integer, default: 100*1000 # < 100KB # configurable in google ?
     # config_param :insert_size_limit, :integer, default: 1000**2 # < 1MB
@@ -220,7 +221,8 @@ module Fluent
 
       client = Google::APIClient.new(
         application_name: 'Fluentd BigQuery plugin',
-        application_version: Fluent::BigQueryPlugin::VERSION
+        application_version: Fluent::BigQueryPlugin::VERSION,
+        faraday_option: { 'timeout' => @request_timeout }
       )
 
       case @auth_method
