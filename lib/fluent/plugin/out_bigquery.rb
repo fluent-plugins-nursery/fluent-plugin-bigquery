@@ -331,6 +331,7 @@ module Fluent
         }
         @load_configuration['schema'] = { 'fields' => @fields.to_a }
         @load_configuration['sourceFormat'] = 'NEWLINE_DELIMITED_JSON'
+        @load_configuration['writeDisposition'] = 'WRITE_APPEND'
 
         buf_file = File.open(chunk.path)
         media = Google::APIClient::UploadIO.new(buf_file, 'application/octet-stream')
