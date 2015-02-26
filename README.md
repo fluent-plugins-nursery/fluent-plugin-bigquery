@@ -127,6 +127,7 @@ Sample load configuration.
   retry_wait 60s
   retry_limit 7
   sync_load_job true          # wait until a load job is done (default)
+  request_timeout 120         # HTTP request timeout (default: 60)
 </match>
 ```
 
