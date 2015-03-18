@@ -293,11 +293,20 @@ module Fluent
           "rows" => rows
         }
       )
-      unless res.success?
+
+      res_obj = extract_response_obj(res.body)
+      if res.success?
+        unless res_obj["insertErrors"].nil? or res_obj["insertErrors"].empty?
+          if res_obj["insertErrors"].size >= rows.size
+            raise "failed to insert into bigquery" # TODO: error class
+          else
+            log.error "insert error", :insert_errors => res_obj["insertErrors"]
+          end
+        end
+      else
         # api_error? -> client cache clear
         @cached_client = nil
 
-        res_obj = extract_response_obj(res.body)
         message = res_obj['error']['message'] || res.body
         if res_obj
           if @auto_create_table and res_obj and res_obj['error']['code'] == 404 and /Not Found: Table/ =~ message.to_s

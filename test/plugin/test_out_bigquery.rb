@@ -698,7 +698,11 @@ class BigQueryOutputTest < Test::Unit::TestCase
         :body_object => {
           'rows' => [entry]
         }
-      ) { stub!.success? { true } }
+      ) {
+        s = stub!
+        s.success? { true }
+        s.body { JSON.generate({'kind' => 'bigquery#tableDataInsertAllRequest'}) }
+      }
     end
 
     chunk = Fluent::MemoryBufferChunk.new("my.tag")
@@ -706,6 +710,56 @@ class BigQueryOutputTest < Test::Unit::TestCase
 
     driver.instance.start
     driver.instance.write(chunk)
+    driver.instance.shutdown
+  end
+
+  def test_write_and_insert_errors
+    entry = {"json" => {"a" => "b"}}, {"json" => {"b" => "c"}}
+    driver = create_driver(CONFIG)
+    mock_client(driver) do |expect|
+      expect.discovered_api("bigquery", "v2") { mock!.tabledata.mock!.insert_all { Object.new } }
+      expect.execute(
+        :api_method => anything,
+        :parameters => {
+          'projectId' => 'yourproject_id',
+          'datasetId' => 'yourdataset_id',
+          'tableId' => 'foo',
+        },
+        :body_object => {
+          'rows' => [entry]
+        }
+      ) {
+        s = stub!
+        s.success? { true }
+        s.body { JSON.generate({
+          'kind' => 'bigquery#tableDataInsertAllRequest',
+          'insertErrors' => [
+            {
+              'index' => 0,
+              'errors' => {
+                'reason' => 'any reason',
+                'message' => 'any message'
+              }
+            },
+            {
+              'index' => 1,
+              'errors' => {
+                'reason' => 'any reason',
+                'message' => 'any message'
+              }
+            },
+          ]
+        }) }
+      }
+    end
+
+    chunk = Fluent::MemoryBufferChunk.new("my.tag")
+    chunk << entry.to_msgpack
+
+    driver.instance.start
+    assert_raise(RuntimeError) {
+      driver.instance.write(chunk)
+    }
     driver.instance.shutdown
   end
 
