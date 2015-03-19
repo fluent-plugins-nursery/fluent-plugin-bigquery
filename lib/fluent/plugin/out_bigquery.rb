@@ -298,8 +298,12 @@ module Fluent
       if res.success?
         unless res_obj["insertErrors"].nil? or res_obj["insertErrors"].empty?
           if res_obj["insertErrors"].size >= rows.size
-            stopped, errors = res_obj["insertErrors"].partition { |ie| (ie["errors"] || []).all? { |e| e["reason"] == "stopped" } }
-            puts "insert errors", :errors => errors, :stopped_count => stopped.count
+            begin
+              stopped, errors = res_obj["insertErrors"].partition { |ie| (ie["errors"] || []).all? { |e| e["reason"] == "stopped" } }
+              log.warn "insert error", :errors => errors, :stopped_count => stopped.count
+            rescue
+              log.warn "insert error", :insert_errors => res_obj["insertErrors"]
+            end
             raise "failed to insert into bigquery" # TODO: error class
           else
             log.error "insert error", :insert_errors => res_obj["insertErrors"]
