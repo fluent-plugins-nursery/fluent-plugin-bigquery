@@ -736,17 +736,15 @@ class BigQueryOutputTest < Test::Unit::TestCase
           'insertErrors' => [
             {
               'index' => 0,
-              'errors' => {
-                'reason' => 'any reason',
-                'message' => 'any message'
-              }
+              'errors' => [{
+                'reason' => 'any reason'
+              }]
             },
             {
               'index' => 1,
-              'errors' => {
-                'reason' => 'any reason',
-                'message' => 'any message'
-              }
+              'errors' => [{
+                'reason' => 'stopped'
+              }]
             },
           ]
         }) }
