@@ -300,7 +300,7 @@ module Fluent
         res_obj = extract_response_obj(res.body)
         message = res_obj['error']['message'] || res.body
         if res_obj
-          if @auto_create_table and res_obj and res_obj['error']['code'] == 404 and /Not Found: Table/ =~ message.to_s
+          if @auto_create_table and res_obj and res_obj['error']['code'] == 404 and /Not Found: Table/i =~ message.to_s
             # Table Not Found: Auto Create Table
             create_table(table_id)
           end
