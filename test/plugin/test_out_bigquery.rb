@@ -779,7 +779,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
         s = stub!
         s.success? { false }
         s.body { JSON.generate({
-          'error' => { "code" => 404, "message" => "Not Found: Table yourproject_id:yourdataset_id.foo" }
+          'error' => { "code" => 404, "message" => "Not found: Table yourproject_id:yourdataset_id.foo" }
         }) }
         s.status { 404 }
         s
