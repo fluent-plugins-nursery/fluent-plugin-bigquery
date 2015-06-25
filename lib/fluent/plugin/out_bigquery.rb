@@ -63,6 +63,9 @@ module Fluent
 
     config_param :auto_create_table, :bool, default: false
 
+    config_param :skip_invalid_rows, :bool, default: false
+    config_param :ignore_unknown_values, :bool, default: false
+
     config_param :schema_path, :string, default: nil
     config_param :fetch_schema, :bool, default: false
     config_param :field_string,  :string, default: nil
@@ -290,7 +293,9 @@ module Fluent
           'tableId' => table_id,
         },
         body_object: {
-          "rows" => rows
+          "rows" => rows,
+          "skipInvalidRows" => @skip_invalid_rows,
+          "ignoreUnknownValues" => @ignore_unknown_values
         }
       )
       unless res.success?
