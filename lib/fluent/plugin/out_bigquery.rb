@@ -303,6 +303,7 @@ module Fluent
           if @auto_create_table and res_obj and res_obj['error']['code'] == 404 and /Not Found: Table/i =~ message.to_s
             # Table Not Found: Auto Create Table
             create_table(table_id)
+            raise "table created. send rows next time."
           end
         end
         log.error "tabledata.insertAll API", project_id: @project, dataset: @dataset, table: table_id, code: res.status, message: message
