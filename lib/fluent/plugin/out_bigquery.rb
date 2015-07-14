@@ -270,7 +270,7 @@ module Fluent
           rescue => e
             log.warn "Parse error: google api error response body", :body => res.body
           end
-          if res_obj and res_obj['code'] == 409 and /Already Exists:/ =~ message
+          if res_obj and res_obj['error']['code'] == 409 and /Already Exists:/ =~ message
             # ignore 'Already Exists' error
             return
           end
