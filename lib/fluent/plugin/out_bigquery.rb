@@ -45,7 +45,7 @@ module Fluent
     ### Service Account credential
     config_param :email, :string, default: nil
     config_param :private_key_path, :string, default: nil
-    config_param :private_key_passphrase, :string, default: 'notasecret'
+    config_param :private_key_passphrase, :string, default: 'notasecret', secret: true
 
     # see as simple reference
     #   https://github.com/abronte/BigQuery/blob/master/lib/bigquery.rb
