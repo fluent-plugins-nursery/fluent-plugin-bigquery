@@ -76,6 +76,10 @@ module Fluent
     # config_param :field_record,  :string, defualt: nil
     # config_param :optional_data_field, :string, default: nil
 
+    REGEXP_MAX_NUM = 10
+    config_param :replace_record_key, :bool, default: false
+    (1..REGEXP_MAX_NUM).each {|i| config_param :"regexp#{i}", :string, default: nil }
+
     config_param :time_format, :string, default: nil
     config_param :localtime, :bool, default: nil
     config_param :utc, :bool, default: nil
@@ -166,6 +170,15 @@ module Fluent
         raw_fields.split(',').each do |field|
           @fields.register_field field.strip, type.to_sym
         end
+      end
+
+      @regexps = {}
+      (1..REGEXP_MAX_NUM).each do |i|
+        next unless conf["regexp#{i}"]
+        regexp, replacement = conf["regexp#{i}"].split(/ /, 2)
+        raise ConfigError, "regexp#{i} does not contain 2 parameters" unless replacement
+        raise ConfigError, "regexp#{i} contains a duplicated key, #{regexp}" if @regexps[regexp]
+        @regexps[regexp] = replacement
       end
 
       @localtime = false if @localtime.nil? && @utc
@@ -316,10 +329,24 @@ module Fluent
       raise NotImplementedError # TODO
     end
 
+    def replace_record(record)
+      new_record = {}
+      record.each do |key, _|
+        new_key = key
+        @regexps.each do |regexp, replacement|
+          new_key = new_key.gsub(/#{regexp}/, replacement)
+        end
+        new_key = new_key.gsub(/\W/, '')
+        new_record.store(new_key, record[key])
+      end
+      new_record
+    end
+
     def format_stream(tag, es)
       super
       buf = ''
       es.each do |time, record|
+        record = replace_record(record) if @replace_record_key
         row = @fields.format(@add_time_field.call(record, time))
         unless row.empty?
           row = {"json" => row}
