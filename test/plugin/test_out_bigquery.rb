@@ -712,7 +712,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       dataset yourdataset_id
 
       replace_record_key true
-      replace_record_regexp1 - _
+      replace_record_key_regexp1 - _
 
       time_format %s
       time_field time
