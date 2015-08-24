@@ -329,7 +329,7 @@ module Fluent
       raise NotImplementedError # TODO
     end
 
-    def replace_record(record)
+    def replace_record_key(record)
       new_record = {}
       record.each do |key, _|
         new_key = key
@@ -346,7 +346,10 @@ module Fluent
       super
       buf = ''
       es.each do |time, record|
-        record = replace_record(record) if @replace_record_key
+        if @replace_record_key
+          record = replace_record_key(record)
+        end
+        
         row = @fields.format(@add_time_field.call(record, time))
         unless row.empty?
           row = {"json" => row}
