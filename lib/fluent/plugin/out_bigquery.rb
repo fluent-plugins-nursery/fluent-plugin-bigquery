@@ -78,7 +78,7 @@ module Fluent
 
     REGEXP_MAX_NUM = 10
     config_param :replace_record_key, :bool, default: false
-    (1..REGEXP_MAX_NUM).each {|i| config_param :"regexp#{i}", :string, default: nil }
+    (1..REGEXP_MAX_NUM).each {|i| config_param :"replace_record_regexp#{i}", :string, default: nil }
 
     config_param :time_format, :string, default: nil
     config_param :localtime, :bool, default: nil
@@ -174,10 +174,10 @@ module Fluent
 
       @regexps = {}
       (1..REGEXP_MAX_NUM).each do |i|
-        next unless conf["regexp#{i}"]
-        regexp, replacement = conf["regexp#{i}"].split(/ /, 2)
-        raise ConfigError, "regexp#{i} does not contain 2 parameters" unless replacement
-        raise ConfigError, "regexp#{i} contains a duplicated key, #{regexp}" if @regexps[regexp]
+        next unless conf["replace_record_regexp#{i}"]
+        regexp, replacement = conf["replace_record_regexp#{i}"].split(/ /, 2)
+        raise ConfigError, "replace_record_regexp#{i} does not contain 2 parameters" unless replacement
+        raise ConfigError, "replace_record_regexp#{i} contains a duplicated key, #{regexp}" if @regexps[regexp]
         @regexps[regexp] = replacement
       end
 
