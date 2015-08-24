@@ -683,6 +683,54 @@ class BigQueryOutputTest < Test::Unit::TestCase
     driver.instance.shutdown
   end
 
+  def test_replace_record_key
+    now = Time.now
+    input = [
+      now,
+      {
+        "vhost" => :bar,
+        "@referer" => "http://referer.example",
+        "bot_access" => true,
+        "login-session" => false
+      }
+    ]
+    expected = {
+      "json" => {
+        "time" => now.to_i,
+        "vhost" => "bar",
+        "referer" => "http://referer.example",
+        "bot_access" => true,
+        "login_session" => false
+      }
+    }
+
+    driver = create_driver(<<-CONFIG)
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      replace_record_key true
+      replace_record_key_regexp1 - _
+
+      time_format %s
+      time_field time
+
+      field_integer time
+      field_string vhost, referer
+      field_boolean bot_access, login_session
+    CONFIG
+    mock_client(driver) do |expect|
+      expect.discovered_api("bigquery", "v2") { stub! }
+    end
+    driver.instance.start
+    buf = driver.instance.format_stream("my.tag", [input])
+    driver.instance.shutdown
+
+    assert_equal expected, MessagePack.unpack(buf)
+  end
+
   def test_write
     entry = {"json" => {"a" => "b"}}, {"json" => {"b" => "c"}}
     driver = create_driver(CONFIG)
