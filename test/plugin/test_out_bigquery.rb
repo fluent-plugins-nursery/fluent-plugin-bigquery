@@ -1,5 +1,6 @@
 require 'helper'
 require 'google/api_client'
+require 'googleauth'
 require 'fluent/plugin/buf_memory'
 
 class BigQueryOutputTest < Test::Unit::TestCase
@@ -60,18 +61,106 @@ class BigQueryOutputTest < Test::Unit::TestCase
     }
   end
 
-  def test_configure_auth
+  def test_configure_auth_private_key
     key = stub!
-    mock(Google::APIClient::PKCS12).load_key('/path/to/key', 'notasecret') { key }
+    mock(Google::APIClient::KeyUtils).load_from_pkcs12('/path/to/key', 'notasecret') { key }
     authorization = Object.new
-    asserter = mock!.authorize { authorization }
-    mock(Google::APIClient::JWTAsserter).new('foo@bar.example', API_SCOPE, key) { asserter }
+    mock(authorization).fetch_access_token!
+    stub(Signet::OAuth2::Client).new
+    mock(Signet::OAuth2::Client).new(
+      token_credential_uri: "https://accounts.google.com/o/oauth2/token",
+      audience: "https://accounts.google.com/o/oauth2/token",
+      scope: API_SCOPE,
+      issuer: 'foo@bar.example',
+      signing_key: key) { authorization }
 
-    mock.proxy(Google::APIClient).new.with_any_args { 
+    mock.proxy(Google::APIClient).new.with_any_args {
       mock!.__send__(:authorization=, authorization) {}
     }
 
     driver = create_driver(CONFIG)
+    driver.instance.client()
+  end
+
+  def test_configure_auth_compute_engine
+    authorization = Object.new
+    mock(authorization).fetch_access_token!
+    mock(Google::Auth::GCECredentials).new { authorization }
+
+    mock.proxy(Google::APIClient).new.with_any_args {
+      mock!.__send__(:authorization=, authorization) {}
+    }
+
+    driver = create_driver(%[
+      table foo
+      auth_method compute_engine
+      project yourproject_id
+      dataset yourdataset_id
+      field_integer time,status,bytes
+    ])
+    driver.instance.client()
+  end
+
+  def test_configure_auth_json_key_as_file
+    json_key_path = 'test/plugin/testdata/json_key.json'
+    authorization = Object.new
+    mock(authorization).fetch_access_token!
+    mock(Google::Auth::ServiceAccountCredentials).new(json_key_io: File.open(json_key_path), scope: API_SCOPE) { authorization }
+
+    mock.proxy(Google::APIClient).new.with_any_args {
+      mock!.__send__(:authorization=, authorization) {}
+    }
+
+    driver = create_driver(%[
+      table foo
+      auth_method json_key
+      json_key #{json_key_path}
+      project yourproject_id
+      dataset yourdataset_id
+      field_integer time,status,bytes
+    ])
+    driver.instance.client()
+  end
+
+  def test_configure_auth_json_key_as_string
+    json_key = '{"private_key": "X", "client_email": "xxx@developer.gserviceaccount.com"}'
+    json_key_io = StringIO.new(json_key)
+    mock(StringIO).new(json_key) { json_key_io }
+    authorization = Object.new
+    mock(authorization).fetch_access_token!
+    mock(Google::Auth::ServiceAccountCredentials).new(json_key_io: json_key_io, scope: API_SCOPE) { authorization }
+
+    mock.proxy(Google::APIClient).new.with_any_args {
+      mock!.__send__(:authorization=, authorization) {}
+    }
+
+    driver = create_driver(%[
+      table foo
+      auth_method json_key
+      json_key #{json_key}
+      project yourproject_id
+      dataset yourdataset_id
+      field_integer time,status,bytes
+    ])
+    driver.instance.client()
+  end
+
+  def test_configure_auth_application_default
+    authorization = Object.new
+    mock(authorization).fetch_access_token!
+    mock(Google::Auth).get_application_default([API_SCOPE]) { authorization }
+
+    mock.proxy(Google::APIClient).new.with_any_args {
+      mock!.__send__(:authorization=, authorization) {}
+    }
+
+    driver = create_driver(%[
+      table foo
+      auth_method application_default
+      project yourproject_id
+      dataset yourdataset_id
+      field_integer time,status,bytes
+    ])
     driver.instance.client()
   end
 
@@ -86,10 +175,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
       time_format %s
       time_field  time
 
-      field_integer time  , status , bytes 
+      field_integer time  , status , bytes
       field_string  _log_name, vhost, path, method, protocol, agent, referer, remote.host, remote.ip, remote.user
-      field_float   requesttime 
-      field_boolean bot_access , loginsession 
+      field_float   requesttime
+      field_boolean bot_access , loginsession
     ])
     fields = driver.instance.instance_eval{ @fields }
 
@@ -483,7 +572,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
     assert fields["tty"]
     assert_equal :string, fields["tty"].type
     assert_equal :nullable, fields["tty"].mode
-    
+
     assert fields["pwd"]
     assert_equal :string, fields["pwd"].type
     assert_equal :required, fields["pwd"].mode
@@ -560,7 +649,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
     assert fields["tty"]
     assert_equal :string, fields["tty"].type
     assert_equal :nullable, fields["tty"].mode
-    
+
     assert fields["pwd"]
     assert_equal :string, fields["pwd"].type
     assert_equal :required, fields["pwd"].mode
