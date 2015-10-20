@@ -38,14 +38,17 @@ module Fluent
     # config_param :client_secret, :string
 
     # Available methods are:
-    # * private_key -- Use service account credential
+    # * private_key -- Use service account credential from pkcs12 private key file
     # * compute_engine -- Use access token available in instances of ComputeEngine
+    # * private_json_key -- Use service account credential from JSON key
+    # * application_default -- Use application default credential
     config_param :auth_method, :string, default: 'private_key'
 
     ### Service Account credential
     config_param :email, :string, default: nil
     config_param :private_key_path, :string, default: nil
     config_param :private_key_passphrase, :string, default: 'notasecret', secret: true
+    config_param :json_key, default: nil
 
     # see as simple reference
     #   https://github.com/abronte/BigQuery/blob/master/lib/bigquery.rb
@@ -128,9 +131,10 @@ module Fluent
       super
       require 'json'
       require 'google/api_client'
-      require 'google/api_client/client_secrets'
-      require 'google/api_client/auth/installed_app'
-      require 'google/api_client/auth/compute_service_account'
+      require 'googleauth'
+
+      # MEMO: signet-0.6.1 depend on Farady.default_connection
+      Faraday.default_connection.options.timeout = 60
     end
 
     # Define `log` method for v0.10.42 or earlier
@@ -147,6 +151,12 @@ module Fluent
           raise Fluent::ConfigError, "'email' and 'private_key_path' must be specified if auth_method == 'private_key'"
         end
       when 'compute_engine'
+        # Do nothing
+      when 'json_key'
+        unless @json_key
+          raise Fluent::ConfigError, "'json_key' must be specified if auth_method == 'json_key'"
+        end
+      when 'application_default'
         # Do nothing
       else
         raise Fluent::ConfigError, "unrecognized 'auth_method': #{@auth_method}"
@@ -227,25 +237,40 @@ module Fluent
         application_version: Fluent::BigQueryPlugin::VERSION
       )
 
+      scope = "https://www.googleapis.com/auth/bigquery"
+
       case @auth_method
       when 'private_key'
-        key = Google::APIClient::PKCS12.load_key( @private_key_path, @private_key_passphrase )
-        asserter = Google::APIClient::JWTAsserter.new(
-          @email,
-          "https://www.googleapis.com/auth/bigquery",
-          key
-        )
-        # refresh_auth
-        client.authorization = asserter.authorize
+        key = Google::APIClient::KeyUtils.load_from_pkcs12(@private_key_path, @private_key_passphrase)
+        auth = Signet::OAuth2::Client.new(
+                token_credential_uri: "https://accounts.google.com/o/oauth2/token",
+                audience: "https://accounts.google.com/o/oauth2/token",
+                scope: scope,
+                issuer: @email,
+                signing_key: key)
 
       when 'compute_engine'
-        auth = Google::APIClient::ComputeServiceAccount.new
-        auth.fetch_access_token!
-        client.authorization = auth
+        auth = Google::Auth::GCECredentials.new
+
+      when 'json_key'
+        if File.exist?(@json_key)
+          auth = File.open(@json_key) do |f|
+            Google::Auth::ServiceAccountCredentials.new(json_key_io: f, scope: scope)
+          end
+        else
+          key = StringIO.new(@json_key)
+          auth = Google::Auth::ServiceAccountCredentials.new(json_key_io: key, scope: scope)
+        end
+
+      when 'application_default'
+        auth = Google::Auth.get_application_default([scope])
 
       else
         raise ConfigError, "Unknown auth method: #{@auth_method}"
       end
+
+      auth.fetch_access_token!
+      client.authorization = auth
 
       @cached_client_expiration = Time.now + 1800
       @cached_client = client
@@ -349,7 +374,7 @@ module Fluent
         if @replace_record_key
           record = replace_record_key(record)
         end
-        
+
         row = @fields.format(@add_time_field.call(record, time))
         unless row.empty?
           row = {"json" => row}
@@ -442,7 +467,7 @@ module Fluent
         ### https://developers.google.com/bigquery/docs/tables
         # Each field has the following properties:
         #
-        # name - The name must contain only letters (a-z, A-Z), numbers (0-9), or underscores (_), 
+        # name - The name must contain only letters (a-z, A-Z), numbers (0-9), or underscores (_),
         #        and must start with a letter or underscore. The maximum length is 128 characters.
         #        https://cloud.google.com/bigquery/docs/reference/v2/tables#schema.fields.name
         unless name =~ /^[_A-Za-z][_A-Za-z0-9]{,127}$/
@@ -468,7 +493,7 @@ module Fluent
       end
 
       def format_one(value)
-        raise NotImplementedError, "Must implement in a subclass" 
+        raise NotImplementedError, "Must implement in a subclass"
       end
 
       def to_h
