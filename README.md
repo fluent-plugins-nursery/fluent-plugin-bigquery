@@ -106,6 +106,31 @@ Important options for high rate events are:
 See [Quota policy](https://cloud.google.com/bigquery/streaming-data-into-bigquery#quota)
 section in the Google BigQuery document.
 
+### Load
+
+Sample load configuration.
+
+```apache
+<match dummy>
+  type bigquery
+
+  ...
+
+  method load
+
+  buffer_type file            # required
+  buffer_path /path/to/file   # required
+  buffer_chunk_limit 256m
+  buffer_queue_limit 64
+  flush_interval 10m          # Daily limit: 1,000 load jobs per table per day (including failures),
+                              # 10,000 load jobs per project per day (including failures)
+  retry_wait 60s
+  retry_limit 7
+  sync_load_job true          # wait until a load job is done (default)
+  request_timeout 120         # HTTP request timeout (default: 60)
+</match>
+```
+
 ### Authentication
 
 There are two methods supported to fetch access token for the service account.
