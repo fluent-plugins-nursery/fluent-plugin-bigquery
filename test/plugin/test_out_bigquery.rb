@@ -820,6 +820,60 @@ class BigQueryOutputTest < Test::Unit::TestCase
     assert_equal expected, MessagePack.unpack(buf)
   end
 
+  def test_convert_hash_to_json
+    now = Time.now
+    input = [
+      now,
+      {
+        "vhost" => :bar,
+        "referer" => "http://referer.example",
+        "bot_access" => true,
+        "loginsession" => false,
+        "remote" => {
+          "host" => "remote.example",
+          "ip" => "192.0.2.1",
+          "port" => 12345,
+          "user" => "tagomoris",
+        }
+      }
+    ]
+    expected = {
+      "json" => {
+        "time" => now.to_i,
+        "vhost" => "bar",
+        "referer" => "http://referer.example",
+        "bot_access" => true,
+        "loginsession" => false,
+        "remote" => "{\"host\":\"remote.example\",\"ip\":\"192.0.2.1\",\"port\":12345,\"user\":\"tagomoris\"}"
+      }
+    }
+
+    driver = create_driver(<<-CONFIG)
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      convert_hash_to_json true
+
+      time_format %s
+      time_field time
+
+      field_integer time
+      field_string vhost, referer, remote
+      field_boolean bot_access, loginsession
+    CONFIG
+    mock_client(driver) do |expect|
+      expect.discovered_api("bigquery", "v2") { stub! }
+    end
+    driver.instance.start
+    buf = driver.instance.format_stream("my.tag", [input])
+    driver.instance.shutdown
+
+    assert_equal expected, MessagePack.unpack(buf)
+  end
+
   def test_write
     entry = {"json" => {"a" => "b"}}, {"json" => {"b" => "c"}}
     driver = create_driver(CONFIG)
