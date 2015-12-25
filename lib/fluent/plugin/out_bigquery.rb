@@ -276,8 +276,16 @@ module Fluent
       @cached_client = client
     end
 
-    def generate_table_id(table_id_format, current_time)
-      current_time.strftime(table_id_format)
+    def generate_table_id(table_id_format, current_time, row)
+      format, col = table_id_format.split(/@/)
+      time = if col && row
+               keys = col.split('.')
+               t = keys.inject(row['json']) {|obj, attr| obj[attr] }
+               Time.at(t)
+             else
+               current_time
+             end
+      time.strftime(format)
     end
 
     def create_table(table_id)
@@ -318,8 +326,7 @@ module Fluent
       end
     end
 
-    def insert(table_id_format, rows)
-      table_id = generate_table_id(table_id_format, Time.at(Fluent::Engine.now))
+    def insert(table_id, rows)
       res = client().execute(
         api_method: @bq.tabledata.insert_all,
         parameters: {
@@ -394,17 +401,20 @@ module Fluent
 
       # TODO: method
 
-      insert_table = @tables_mutex.synchronize do
+      insert_table_format = @tables_mutex.synchronize do
         t = @tables_queue.shift
         @tables_queue.push t
         t
       end
-      insert(insert_table, rows)
+
+      rows.group_by {|row| generate_table_id(insert_table_format, Time.at(Fluent::Engine.now), row) }.each do |table_id, rows|
+        insert(table_id, rows)
+      end
     end
 
     def fetch_schema
       table_id_format = @tablelist[0]
-      table_id = generate_table_id(table_id_format, Time.at(Fluent::Engine.now))
+      table_id = generate_table_id(table_id_format, Time.at(Fluent::Engine.now), nil)
       res = client.execute(
         api_method: @bq.tables.get,
         parameters: {

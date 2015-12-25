@@ -846,12 +846,88 @@ class BigQueryOutputTest < Test::Unit::TestCase
     driver.instance.shutdown
   end
 
-  def test_generate_table_id
+  def test_write_with_row_based_table_id_formatting
+    entry = [
+      {"json" => {"a" => "b", "created_at" => Time.local(2014,8,20,9,0,0).to_i}},
+      {"json" => {"b" => "c", "created_at" => Time.local(2014,8,21,9,0,0).to_i}}
+    ]
+    driver = create_driver(<<-CONFIG)
+      table foo_%Y_%m_%d@created_at
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      time_format %s
+      time_field  time
+
+      field_integer time,status,bytes
+      field_string  vhost,path,method,protocol,agent,referer,remote.host,remote.ip,remote.user
+      field_float   requesttime
+      field_boolean bot_access,loginsession
+    CONFIG
+    mock_client(driver) do |expect|
+      expect.discovered_api("bigquery", "v2") { mock!.tabledata.times(2).mock!.insert_all.times(2) { Object.new } }
+
+      expect.execute(
+        :api_method => anything,
+        :parameters => {
+          'projectId' => 'yourproject_id',
+          'datasetId' => 'yourdataset_id',
+          'tableId' => 'foo_2014_08_20',
+        },
+        :body_object => {
+          'rows' => [entry[0]]
+        }
+      ) { stub!.success? { true } }
+
+      expect.execute(
+        :api_method => anything,
+        :parameters => {
+          'projectId' => 'yourproject_id',
+          'datasetId' => 'yourdataset_id',
+          'tableId' => 'foo_2014_08_21',
+        },
+        :body_object => {
+          'rows' => [entry[1]]
+        }
+      ) { stub!.success? { true } }
+    end
+
+    chunk = Fluent::MemoryBufferChunk.new("my.tag")
+    entry.each do |object|
+      chunk << object.to_msgpack
+    end
+
+    driver.instance.start
+    driver.instance.write(chunk)
+    driver.instance.shutdown
+  end
+
+  def test_generate_table_id_without_row
     driver = create_driver
     table_id_format = 'foo_%Y_%m_%d'
     time = Time.local(2014, 8, 11, 21, 20, 56)
-    table_id = driver.instance.generate_table_id(table_id_format, time)
+    table_id = driver.instance.generate_table_id(table_id_format, time, nil)
     assert_equal 'foo_2014_08_11', table_id
+  end
+
+  def test_generate_table_id_with_row
+    driver = create_driver
+    table_id_format = 'foo_%Y_%m_%d@created_at'
+    time = Time.local(2014, 8, 11, 21, 20, 56)
+    row = { "json" => { "created_at" => Time.local(2014,8,10,21,20,57).to_i } }
+    table_id = driver.instance.generate_table_id(table_id_format, time, row)
+    assert_equal 'foo_2014_08_10', table_id
+  end
+
+  def test_generate_table_id_with_row_nested_attribute
+    driver = create_driver
+    table_id_format = 'foo_%Y_%m_%d@foo.bar.created_at'
+    time = Time.local(2014, 8, 11, 21, 20, 56)
+    row = { "json" => { "foo" => { "bar" => { "created_at" => Time.local(2014,8,10,21,20,57).to_i } } } }
+    table_id = driver.instance.generate_table_id(table_id_format, time, row)
+    assert_equal 'foo_2014_08_10', table_id
   end
 
   def test_auto_create_table_by_bigquery_api
