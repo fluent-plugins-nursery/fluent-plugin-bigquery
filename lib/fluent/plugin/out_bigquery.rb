@@ -255,11 +255,11 @@ module Fluent
       when 'json_key'
         if File.exist?(@json_key)
           auth = File.open(@json_key) do |f|
-            Google::Auth::ServiceAccountCredentials.new(json_key_io: f, scope: scope)
+            Google::Auth::ServiceAccountCredentials.make_creds(json_key_io: f, scope: scope)
           end
         else
           key = StringIO.new(@json_key)
-          auth = Google::Auth::ServiceAccountCredentials.new(json_key_io: key, scope: scope)
+          auth = Google::Auth::ServiceAccountCredentials.make_creds(json_key_io: key, scope: scope)
         end
 
       when 'application_default'
