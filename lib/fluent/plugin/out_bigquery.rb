@@ -131,7 +131,7 @@ module Fluent
 
     def initialize
       super
-      require 'json'
+      require 'multi_json'
       require 'google/apis/bigquery_v2'
       require 'googleauth'
       require 'active_support/core_ext/hash'
@@ -174,7 +174,7 @@ module Fluent
 
       @fields = RecordSchema.new('record')
       if @schema_path
-        @fields.load_schema(JSON.parse(File.read(@schema_path)))
+        @fields.load_schema(MultiJson.load(File.read(@schema_path)))
       end
 
       types = %w(string integer float boolean timestamp)
@@ -280,7 +280,7 @@ module Fluent
       format, col = table_id_format.split(/@/)
       time = if col && row
                keys = col.split('.')
-               t = keys.inject(row['json']) {|obj, attr| obj[attr] }
+               t = keys.inject(row[:json]) {|obj, attr| obj[attr.to_sym] }
                Time.at(t)
              else
                current_time
@@ -359,7 +359,7 @@ module Fluent
     def convert_hash_to_json(record)
       record.each do |key, value|
         if value.class == Hash
-          record[key] = value.to_json
+          record[key] = MultiJson.dump(value)
         end
       end
       record
