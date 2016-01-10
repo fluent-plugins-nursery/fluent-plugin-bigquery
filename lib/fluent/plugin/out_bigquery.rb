@@ -13,7 +13,7 @@ module Fluent
   # class BigQueryAPIError < StandardError
   # end
 
-  class BigQueryOutput < BufferedOutput
+  class BigQueryOutput < TimeSlicedOutput
     Fluent::Plugin.register_output('bigquery', self)
 
     # https://developers.google.com/bigquery/browser-tool-quickstart
@@ -278,7 +278,7 @@ module Fluent
       @cached_client = client
     end
 
-    def generate_table_id(table_id_format, current_time, row)
+    def generate_table_id(table_id_format, current_time, row = nil, chunk = nil)
       format, col = table_id_format.split(/@/)
       time = if col && row
                keys = col.split('.')
@@ -287,7 +287,17 @@ module Fluent
              else
                current_time
              end
-      time.strftime(format)
+      table_id = time.strftime(format)
+
+      if chunk
+        table_id.gsub(%r(%{time_slice})) { |expr|
+          chunk.key
+        }
+      else
+        table_id.gsub(%r(%{time_slice})) { |expr|
+          current_time.strftime(@time_slice_format)
+        }
+      end
     end
 
     def create_table(table_id)
@@ -385,24 +395,22 @@ module Fluent
       record
     end
 
-    def format_stream(tag, es)
-      super
+    def format(tag, time, record)
       buf = ''
-      es.each do |time, record|
-        if @replace_record_key
-          record = replace_record_key(record)
-        end
 
-        if @convert_hash_to_json
-          record = convert_hash_to_json(record)
-        end
+      if @replace_record_key
+        record = replace_record_key(record)
+      end
 
-        row = @fields.format(@add_time_field.call(record, time))
-        unless row.empty?
-          row = {"json" => row}
-          row['insertId'] = @get_insert_id.call(record) if @get_insert_id
-          buf << row.to_msgpack
-        end
+      if @convert_hash_to_json
+        record = convert_hash_to_json(record)
+      end
+
+      row = @fields.format(@add_time_field.call(record, time))
+      unless row.empty?
+        row = {"json" => row}
+        row['insertId'] = @get_insert_id.call(record) if @get_insert_id
+        buf << row.to_msgpack
       end
       buf
     end
@@ -422,14 +430,14 @@ module Fluent
         t
       end
 
-      rows.group_by {|row| generate_table_id(insert_table_format, Time.at(Fluent::Engine.now), row) }.each do |table_id, rows|
+      rows.group_by {|row| generate_table_id(insert_table_format, Time.at(Fluent::Engine.now), row, chunk) }.each do |table_id, rows|
         insert(table_id, rows)
       end
     end
 
     def fetch_schema
       table_id_format = @tablelist[0]
-      table_id = generate_table_id(table_id_format, Time.at(Fluent::Engine.now), nil)
+      table_id = generate_table_id(table_id_format, Time.at(Fluent::Engine.now))
       res = client.execute(
         api_method: @bq.tables.get,
         parameters: {
