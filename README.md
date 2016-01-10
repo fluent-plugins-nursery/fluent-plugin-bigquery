@@ -233,6 +233,23 @@ The format can be suffixed with attribute name.
 If attribute name is given, the time to be used for formatting is value of each row.
 The value for the time should be a UNIX time.
 
+Or, the options can use `%{time_slice}` placeholder.
+`%{time_slice}` is replaced by formatted time slice key at runtime.
+
+```apache
+<match dummy>
+  type bigquery
+  
+  ...
+  
+  project yourproject_id
+  dataset yourdataset_id
+  table   accesslog%{time_slice}
+  
+  ...
+</match>
+```
+
 ### Dynamic table creating
 
 When `auto_create_table` is set to `true`, try to create the table using BigQuery API when insertion failed with code=404 "Not Found: Table ...".
