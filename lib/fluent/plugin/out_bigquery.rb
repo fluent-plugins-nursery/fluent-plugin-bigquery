@@ -66,6 +66,20 @@ module Fluent
 
     config_param :auto_create_table, :bool, default: false
 
+    # skip_invalid_rows (only insert)
+    #   Insert all valid rows of a request, even if invalid rows exist.
+    #   The default value is false, which causes the entire request to fail if any invalid rows exist.
+    config_param :skip_invalid_rows, :bool, default: false
+    # max_bad_records (only load)
+    #   The maximum number of bad records that BigQuery can ignore when running the job.
+    #   If the number of bad records exceeds this value, an invalid error is returned in the job result.
+    #   The default value is 0, which requires that all records are valid.
+    config_param :max_bad_records, :integer, default: 0
+    # ignore_unknown_values
+    #   Accept rows that contain values that do not match the schema. The unknown values are ignored.
+    #   Default is false, which treats unknown values as errors.
+    config_param :ignore_unknown_values, :bool, default: false
+
     config_param :schema_path, :string, default: nil
     config_param :fetch_schema, :bool, default: false
     config_param :field_string,  :string, default: nil
@@ -411,7 +425,9 @@ module Fluent
 
       def insert(table_id, rows)
         client.insert_all_table_data(@project, @dataset, table_id, {
-          rows: rows
+          rows: rows,
+          skip_invalid_rows: @skip_invalid_rows,
+          ignore_unknown_values: @ignore_unknown_values,
         }, {})
       rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
         # api_error? -> client cache clear
@@ -462,7 +478,9 @@ module Fluent
                   fields: @fields.to_a,
                 },
                 write_disposition: "WRITE_APPEND",
-                source_format: "NEWLINE_DELIMITED_JSON"
+                source_format: "NEWLINE_DELIMITED_JSON",
+                ignore_unknown_values: @ignore_unknown_values,
+                max_bad_records: @max_bad_records,
               }
             }
           }, {upload_source: upload_source, content_type: "application/octet-stream"})
