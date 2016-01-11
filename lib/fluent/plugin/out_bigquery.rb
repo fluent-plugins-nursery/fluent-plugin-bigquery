@@ -151,9 +151,9 @@ module Fluent
       super
 
       if @method == "insert"
-        self.extend(InsertImplementation)
+        extend(InsertImplementation)
       elsif @method == "load"
-        self.extend(LoadImplementation)
+        extend(LoadImplementation)
       else
         raise Fluend::ConfigError "'method' must be 'insert' or 'load'"
       end
@@ -404,8 +404,8 @@ module Fluent
           rows << row_object.deep_symbolize_keys
         end
 
-        rows.group_by {|row| generate_table_id(table_format, Time.at(Fluent::Engine.now), row, chunk) }.each do |table_id, rows|
-          insert(table_id, rows)
+        rows.group_by {|row| generate_table_id(table_format, Time.at(Fluent::Engine.now), row, chunk) }.each do |table_id, group|
+          insert(table_id, group)
         end
       end
 
@@ -442,15 +442,14 @@ module Fluent
         buf
       end
 
-      def _write(chunk, table_id)
-        table_id = generate_table_id(table_id_format, Time.at(Fluent::Engine.now), chunk)
-        path = create_upload_source(chunk)
-        load(table_id, path)
+      def _write(chunk, table_id_format)
+        table_id = generate_table_id(table_id_format, Time.at(Fluent::Engine.now), nil, chunk)
+        load(chunk, table_id)
       end
 
-      def load(table_id, path)
+      def load(chunk, table_id)
         res = nil
-        File.open(path) do |upload_source|
+        create_upload_source(chunk) do |upload_source|
           res = client.insert_job(@project, {
             configuration: {
               load: {
@@ -469,8 +468,9 @@ module Fluent
           }, {upload_source: upload_source, content_type: "application/octet-stream"})
         end
         wait_load(res, table_id)
-        clear_upload_source
       end
+
+      private
 
       def wait_load(res, table_id)
         wait_interval = 10
@@ -492,19 +492,18 @@ module Fluent
       def create_upload_source(chunk)
         chunk_is_file = @buffer_type == 'file'
         if chunk_is_file
-          chunk.path
+          File.open(chunk.path) do |file|
+            yield file
+          end
         else
-          @upload_source_tmp = Tempfile.new("chunk-tmp")
-          @upload_source_tmp.binmode
-          chunk.write_to(@upload_source_tmp)
-          @upload_source_tmp.sync
-          @upload_source_tmp.rewind
-          @upload_source_tmp.path
+          Tempfile.open("chunk-tmp") do |file|
+            file.binmode
+            chunk.write_to(file)
+            file.sync
+            file.rewind
+            yield file
+          end
         end
-      end
-
-      def clear_upload_source
-        @upload_source_tmp.close(true) if @upload_source_tmp
       end
     end
 
