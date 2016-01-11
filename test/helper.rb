@@ -27,7 +27,6 @@ require 'fluent/plugin/buf_memory'
 require 'fluent/plugin/buf_file'
 
 require 'fluent/plugin/out_bigquery'
-require 'fluent/plugin/bigquery/load_request_body_wrapper'
 
 require 'rr'
 
