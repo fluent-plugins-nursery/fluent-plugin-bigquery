@@ -873,8 +873,104 @@ class BigQueryOutputTest < Test::Unit::TestCase
     mock_client(driver) do |expect|
       expect.insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo', {
         rows: entry
-      }, {}) { stub! }
+      }, {}) {
+        s = stub!
+        s.insert_errors { nil }
+        s
+      }
     end
+
+    chunk = Fluent::MemoryBufferChunk.new("my.tag")
+    entry.each do |e|
+      chunk << e.to_msgpack
+    end
+
+    driver.instance.start
+    driver.instance.write(chunk)
+    driver.instance.shutdown
+  end
+
+  def test_write_with_retryable_error
+    entry = {json: {a: "b"}}, {json: {b: "c"}}
+    driver = create_driver(<<-CONFIG)
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      time_format %s
+      time_field  time
+
+      field_integer time,status,bytes
+      field_string  vhost,path,method,protocol,agent,referer,remote.host,remote.ip,remote.user
+      field_float   requesttime
+      field_boolean bot_access,loginsession
+      <secondary>
+        type file
+        path error
+        utc
+      </secondary>
+    CONFIG
+    mock_client(driver) do |expect|
+      expect.insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo', {
+        rows: entry
+      }, {}) {
+        ex = Google::Apis::ServerError.new("error")
+        def ex.reason
+          "backendError"
+        end
+        raise ex
+      }
+    end
+
+    chunk = Fluent::MemoryBufferChunk.new("my.tag")
+    entry.each do |e|
+      chunk << e.to_msgpack
+    end
+
+    driver.instance.start
+    assert_raise RuntimeError do
+      driver.instance.write(chunk)
+    end
+    driver.instance.shutdown
+  end
+
+  def test_write_with_not_retryable_error
+    entry = {json: {a: "b"}}, {json: {b: "c"}}
+    driver = create_driver(<<-CONFIG)
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      time_format %s
+      time_field  time
+
+      field_integer time,status,bytes
+      field_string  vhost,path,method,protocol,agent,referer,remote.host,remote.ip,remote.user
+      field_float   requesttime
+      field_boolean bot_access,loginsession
+      <secondary>
+        type file
+        path error
+        utc
+      </secondary>
+    CONFIG
+    mock_client(driver) do |expect|
+      expect.insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo', {
+        rows: entry
+      }, {}) {
+        ex = Google::Apis::ServerError.new("error")
+        def ex.reason
+          "invalid"
+        end
+        raise ex
+      }
+    end
+
+    mock(driver.instance).flush_secondary(is_a(Fluent::Output))
 
     chunk = Fluent::MemoryBufferChunk.new("my.tag")
     entry.each do |e|
@@ -933,9 +1029,149 @@ class BigQueryOutputTest < Test::Unit::TestCase
         s.status { status_stub }
         status_stub.state { "DONE" }
         status_stub.error_result { nil }
+        status_stub.errors { nil }
         s
       }
     end
+
+    entry.each do |e|
+      chunk << MultiJson.dump(e) + "\n"
+    end
+
+    driver.instance.start
+    driver.instance.write(chunk)
+    driver.instance.shutdown
+  end
+
+  def test_write_for_load_with_retryable_error
+    schema_path = File.join(File.dirname(__FILE__), "testdata", "sudo.schema")
+    entry = {a: "b"}, {b: "c"}
+    driver = create_driver(<<-CONFIG)
+      method load
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      time_format %s
+      time_field  time
+
+      schema_path #{schema_path}
+      field_integer time
+    CONFIG
+    schema_fields = MultiJson.load(File.read(schema_path)).map(&:deep_symbolize_keys).tap do |h|
+      h[0][:type] = "INTEGER"
+      h[0][:mode] = "NULLABLE"
+    end
+
+    chunk = Fluent::MemoryBufferChunk.new("my.tag")
+    io = StringIO.new("hello")
+    mock(driver.instance).create_upload_source(chunk).yields(io)
+    mock_client(driver) do |expect|
+      expect.insert_job('yourproject_id', {
+        configuration: {
+          load: {
+            destination_table: {
+              project_id: 'yourproject_id',
+              dataset_id: 'yourdataset_id',
+              table_id: 'foo',
+            },
+            schema: {
+              fields: schema_fields,
+            },
+            write_disposition: "WRITE_APPEND",
+            source_format: "NEWLINE_DELIMITED_JSON"
+          }
+        }
+      }, {upload_source: io, content_type: "application/octet-stream"}) {
+        s = stub!
+        status_stub = stub!
+        error_result = stub!
+
+        s.status { status_stub }
+        status_stub.state { "DONE" }
+        status_stub.error_result { error_result }
+        status_stub.errors { nil }
+        error_result.message { "error" }
+        error_result.reason { "backendError" }
+        s
+      }
+    end
+
+    entry.each do |e|
+      chunk << MultiJson.dump(e) + "\n"
+    end
+
+    driver.instance.start
+    assert_raise RuntimeError do
+      driver.instance.write(chunk)
+    end
+    driver.instance.shutdown
+  end
+
+  def test_write_for_load_with_not_retryable_error
+    schema_path = File.join(File.dirname(__FILE__), "testdata", "sudo.schema")
+    entry = {a: "b"}, {b: "c"}
+    driver = create_driver(<<-CONFIG)
+      method load
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      time_format %s
+      time_field  time
+
+      schema_path #{schema_path}
+      field_integer time
+      <secondary>
+        type file
+        path error
+        utc
+      </secondary>
+    CONFIG
+    schema_fields = MultiJson.load(File.read(schema_path)).map(&:deep_symbolize_keys).tap do |h|
+      h[0][:type] = "INTEGER"
+      h[0][:mode] = "NULLABLE"
+    end
+
+    chunk = Fluent::MemoryBufferChunk.new("my.tag")
+    io = StringIO.new("hello")
+    mock(driver.instance).create_upload_source(chunk).yields(io)
+    mock_client(driver) do |expect|
+      expect.insert_job('yourproject_id', {
+        configuration: {
+          load: {
+            destination_table: {
+              project_id: 'yourproject_id',
+              dataset_id: 'yourdataset_id',
+              table_id: 'foo',
+            },
+            schema: {
+              fields: schema_fields,
+            },
+            write_disposition: "WRITE_APPEND",
+            source_format: "NEWLINE_DELIMITED_JSON"
+          }
+        }
+      }, {upload_source: io, content_type: "application/octet-stream"}) {
+        s = stub!
+        status_stub = stub!
+        error_result = stub!
+
+        s.status { status_stub }
+        status_stub.state { "DONE" }
+        status_stub.error_result { error_result }
+        status_stub.errors { nil }
+        error_result.message { "error" }
+        error_result.reason { "invalid" }
+        s
+      }
+    end
+
+    mock(driver.instance).flush_secondary(is_a(Fluent::Output))
 
     entry.each do |e|
       chunk << MultiJson.dump(e) + "\n"
@@ -969,11 +1205,11 @@ class BigQueryOutputTest < Test::Unit::TestCase
     mock_client(driver) do |expect|
       expect.insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo_2014_08_20', {
         rows: [entry[0]]
-      }, {})
+      }, {}) { stub!.insert_errors { nil } }
 
       expect.insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo_2014_08_21', {
         rows: [entry[1]]
-      }, {})
+      }, {}) { stub!.insert_errors { nil } }
     end
 
     chunk = Fluent::MemoryBufferChunk.new("my.tag")

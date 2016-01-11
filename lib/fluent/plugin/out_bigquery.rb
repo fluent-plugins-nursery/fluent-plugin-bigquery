@@ -143,6 +143,8 @@ module Fluent
     # REQUIRED - The cell cannot be null.
     # REPEATED - Zero or more repeated simple or nested subfields. This mode is only supported when using JSON source files.
 
+    RETRYABLE_ERROR_REASON = %w(backendError internalError rateLimitExceeded tableUnavailable).freeze
+
     def initialize
       super
       require 'multi_json'
@@ -424,7 +426,7 @@ module Fluent
       end
 
       def insert(table_id, rows)
-        client.insert_all_table_data(@project, @dataset, table_id, {
+        res = client.insert_all_table_data(@project, @dataset, table_id, {
           rows: rows,
           skip_invalid_rows: @skip_invalid_rows,
           ignore_unknown_values: @ignore_unknown_values,
@@ -433,14 +435,19 @@ module Fluent
         # api_error? -> client cache clear
         @cached_client = nil
 
-        message = e.message
-        if @auto_create_table && e.status_code == 404 && /Not Found: Table/i =~ message.to_s
+        if @auto_create_table && e.status_code == 404 && /Not Found: Table/i =~ e.message
           # Table Not Found: Auto Create Table
           create_table(table_id)
           raise "table created. send rows next time."
         end
-        log.error "tabledata.insertAll API", project_id: @project, dataset: @dataset, table: table_id, code: e.status_code, message: message
-        raise "failed to insert into bigquery" # TODO: error class
+
+        reason = e.respond_to?(:reason) ? e.reason : nil
+        log.error "tabledata.insertAll API", project_id: @project, dataset: @dataset, table: table_id, code: e.status_code, message: e.message, reason: reason
+        if RETRYABLE_ERROR_REASON.include?(reason)
+          raise "failed to insert into bigquery, retry" # TODO: error class
+        elsif @secondary
+          flush_secondary(@secondary)
+        end
       end
     end
 
@@ -486,6 +493,17 @@ module Fluent
           }, {upload_source: upload_source, content_type: "application/octet-stream"})
         end
         wait_load(res, table_id)
+      rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
+        # api_error? -> client cache clear
+        @cached_client = nil
+
+        reason = e.respond_to?(:reason) ? e.reason : nil
+        log.error "job.load API", project_id: @project, dataset: @dataset, table: table_id, code: e.status_code, message: e.message, reason: reason
+        if RETRYABLE_ERROR_REASON.include?(reason)
+          raise "failed to insert into bigquery, retry" # TODO: error class
+        elsif @secondary
+          flush_secondary(@secondary)
+        end
       end
 
       private
@@ -499,9 +517,21 @@ module Fluent
           _response = client.get_job(@project, _response.job_reference.job_id)
         end
 
-        if _response.status.error_result
-          log.error "job.insert API", project_id: @project, dataset: @dataset, table: table_id, message: _response.status.error_result.message
-          raise "failed to load into bigquery"
+        errors = _response.status.errors
+        if errors
+          errors.each do |e|
+            log.error "job.load API (rows)", project_id: @project, dataset: @dataset, table: table_id, message: e.message, reason: e.reason
+          end
+        end
+
+        error_result = _response.status.error_result
+        if error_result
+          log.error "job.load API (result)", project_id: @project, dataset: @dataset, table: table_id, message: error_result.message, reason: error_result.reason
+          if RETRYABLE_ERROR_REASON.include?(_response.status.error_result.reason)
+            raise "failed to load into bigquery"
+          elsif @secondary
+            flush_secondary(@secondary)
+          end
         end
 
         log.debug "finish load job", state: _response.status.state
