@@ -220,8 +220,18 @@ data is inserted into tables `accesslog_2014_08`, `accesslog_2014_09` and so on.
 </match>
 ```
 
-Note that the timestamp of logs and the date in the table id do not always match,
-because there is a time lag between collection and transmission of logs.
+The format can be suffixed with attribute name.
+
+```apache
+<match dummy>
+  ...
+  table   accesslog_%Y_%m@timestamp
+  ...
+</match>
+```
+
+If attribute name is given, the time to be used for formatting is value of each row.
+The value for the time should be a UNIX time.
 
 ### Dynamic table creating
 

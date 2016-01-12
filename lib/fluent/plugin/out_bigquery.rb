@@ -83,6 +83,8 @@ module Fluent
     config_param :replace_record_key, :bool, default: false
     (1..REGEXP_MAX_NUM).each {|i| config_param :"replace_record_key_regexp#{i}", :string, default: nil }
 
+    config_param :convert_hash_to_json, :bool, default: false
+
     config_param :time_format, :string, default: nil
     config_param :localtime, :bool, default: nil
     config_param :utc, :bool, default: nil
@@ -276,8 +278,16 @@ module Fluent
       @cached_client = client
     end
 
-    def generate_table_id(table_id_format, current_time)
-      current_time.strftime(table_id_format)
+    def generate_table_id(table_id_format, current_time, row)
+      format, col = table_id_format.split(/@/)
+      time = if col && row
+               keys = col.split('.')
+               t = keys.inject(row['json']) {|obj, attr| obj[attr] }
+               Time.at(t)
+             else
+               current_time
+             end
+      time.strftime(format)
     end
 
     def create_table(table_id)
@@ -318,8 +328,7 @@ module Fluent
       end
     end
 
-    def insert(table_id_format, rows)
-      table_id = generate_table_id(table_id_format, Time.at(Fluent::Engine.now))
+    def insert(table_id, rows)
       res = client().execute(
         api_method: @bq.tabledata.insert_all,
         parameters: {
@@ -367,12 +376,25 @@ module Fluent
       new_record
     end
 
+    def convert_hash_to_json(record)
+      record.each do |key, value|
+        if value.class == Hash
+          record[key] = value.to_json
+        end
+      end
+      record
+    end
+
     def format_stream(tag, es)
       super
       buf = ''
       es.each do |time, record|
         if @replace_record_key
           record = replace_record_key(record)
+        end
+
+        if @convert_hash_to_json
+          record = convert_hash_to_json(record)
         end
 
         row = @fields.format(@add_time_field.call(record, time))
@@ -394,17 +416,20 @@ module Fluent
 
       # TODO: method
 
-      insert_table = @tables_mutex.synchronize do
+      insert_table_format = @tables_mutex.synchronize do
         t = @tables_queue.shift
         @tables_queue.push t
         t
       end
-      insert(insert_table, rows)
+
+      rows.group_by {|row| generate_table_id(insert_table_format, Time.at(Fluent::Engine.now), row) }.each do |table_id, rows|
+        insert(table_id, rows)
+      end
     end
 
     def fetch_schema
       table_id_format = @tablelist[0]
-      table_id = generate_table_id(table_id_format, Time.at(Fluent::Engine.now))
+      table_id = generate_table_id(table_id_format, Time.at(Fluent::Engine.now), nil)
       res = client.execute(
         api_method: @bq.tables.get,
         parameters: {
