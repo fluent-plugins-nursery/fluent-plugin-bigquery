@@ -105,7 +105,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
     json_key_path = 'test/plugin/testdata/json_key.json'
     authorization = Object.new
     mock(authorization).fetch_access_token!
-    mock(Google::Auth::ServiceAccountCredentials).new(json_key_io: File.open(json_key_path), scope: API_SCOPE) { authorization }
+    mock(Google::Auth::ServiceAccountCredentials).make_creds(json_key_io: File.open(json_key_path), scope: API_SCOPE) { authorization }
 
     mock.proxy(Google::APIClient).new.with_any_args {
       mock!.__send__(:authorization=, authorization) {}
@@ -128,7 +128,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
     mock(StringIO).new(json_key) { json_key_io }
     authorization = Object.new
     mock(authorization).fetch_access_token!
-    mock(Google::Auth::ServiceAccountCredentials).new(json_key_io: json_key_io, scope: API_SCOPE) { authorization }
+    mock(Google::Auth::ServiceAccountCredentials).make_creds(json_key_io: json_key_io, scope: API_SCOPE) { authorization }
 
     mock.proxy(Google::APIClient).new.with_any_args {
       mock!.__send__(:authorization=, authorization) {}
