@@ -83,6 +83,8 @@ module Fluent
     config_param :replace_record_key, :bool, default: false
     (1..REGEXP_MAX_NUM).each {|i| config_param :"replace_record_key_regexp#{i}", :string, default: nil }
 
+    config_param :convert_hash_to_json, :bool, default: false
+
     config_param :time_format, :string, default: nil
     config_param :localtime, :bool, default: nil
     config_param :utc, :bool, default: nil
@@ -374,12 +376,25 @@ module Fluent
       new_record
     end
 
+    def convert_hash_to_json(record)
+      record.each do |key, value|
+        if value.class == Hash
+          record[key] = value.to_json
+        end
+      end
+      record
+    end
+
     def format_stream(tag, es)
       super
       buf = ''
       es.each do |time, record|
         if @replace_record_key
           record = replace_record_key(record)
+        end
+
+        if @convert_hash_to_json
+          record = convert_hash_to_json(record)
         end
 
         row = @fields.format(@add_time_field.call(record, time))
