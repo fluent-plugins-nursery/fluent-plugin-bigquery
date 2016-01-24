@@ -27,7 +27,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
   API_SCOPE = "https://www.googleapis.com/auth/bigquery"
 
   def create_driver(conf = CONFIG)
-    Fluent::Test::OutputTestDriver.new(Fluent::BigQueryOutput).configure(conf)
+    Fluent::Test::TimeSlicedOutputTestDriver.new(Fluent::BigQueryOutput).configure(conf)
   end
 
   def stub_client(driver)
@@ -982,6 +982,18 @@ class BigQueryOutputTest < Test::Unit::TestCase
     row = { "json" => { "foo" => { "bar" => { "created_at" => Time.local(2014,8,10,21,20,57).to_i } } } }
     table_id = driver.instance.generate_table_id(table_id_format, time, row)
     assert_equal 'foo_2014_08_10', table_id
+  end
+
+  def test_generate_table_id_with_time_sliced_format
+    driver = create_driver
+    table_id_format = 'foo_%{time_slice}'
+    current_time = Time.now
+    time = Time.local(2014, 8, 11, 21, 20, 56)
+    row = { "json" => { "foo" => "bar", "time" => time.to_i } }
+    chunk = Object.new
+    mock(chunk).key { time.strftime("%Y%m%d") }
+    table_id = driver.instance.generate_table_id(table_id_format, current_time, row, chunk)
+    assert_equal 'foo_20140811', table_id
   end
 
   def test_auto_create_table_by_bigquery_api
