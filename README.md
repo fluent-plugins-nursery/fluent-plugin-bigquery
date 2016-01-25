@@ -5,7 +5,7 @@
 * insert data over streaming inserts
   * for continuous real-time insertions
   * https://developers.google.com/bigquery/streaming-data-into-bigquery#usecases
-* (NOT IMPLEMENTED) load data
+* load data
   * for data loading as batch jobs, for big amount of data
   * https://developers.google.com/bigquery/loading-data-into-bigquery
   
@@ -106,6 +106,37 @@ Important options for high rate events are:
 See [Quota policy](https://cloud.google.com/bigquery/streaming-data-into-bigquery#quota)
 section in the Google BigQuery document.
 
+### Load
+```apache
+<match bigquery>
+  @type bigquery
+
+  method load
+  buffer_type file
+  buffer_path bigquery.*.buffer
+  flush_interval 1800
+  flush_at_shutdown true
+  try_flush_interval 1
+  utc
+
+  auth_method json_key
+  json_key json_key_path.json
+
+  time_format %s
+  time_field  time
+
+  project yourproject_id
+  dataset yourdataset_id
+  auto_create_table true
+  table yourtable%{time_slice}
+  schema_path bq_schema.json
+</match>
+```
+
+I recommend to use file buffer and long flush interval.
+
+__CAUTION: `flush_interval` default is still `0.25` even if `method` is `load` on current version.__
+
 ### Authentication
 
 There are two methods supported to fetch access token for the service account.
@@ -198,6 +229,7 @@ In this authentication method, the credentials returned are determined by the en
 
 ### Table id formatting
 
+#### strftime formatting
 `table` and `tables` options accept [Time#strftime](http://ruby-doc.org/core-1.9.3/Time.html#method-i-strftime)
 format to construct table ids.
 Table ids are formatted at runtime
@@ -220,7 +252,10 @@ data is inserted into tables `accesslog_2014_08`, `accesslog_2014_09` and so on.
 </match>
 ```
 
+#### record attribute formatting
 The format can be suffixed with attribute name.
+
+__NOTE: This feature is available only if `method` is `insert`. Because it makes performance impact. Use `%{time_slice}` instead of it.__
 
 ```apache
 <match dummy>
@@ -233,19 +268,16 @@ The format can be suffixed with attribute name.
 If attribute name is given, the time to be used for formatting is value of each row.
 The value for the time should be a UNIX time.
 
+#### time_slice_key formatting
 Or, the options can use `%{time_slice}` placeholder.
 `%{time_slice}` is replaced by formatted time slice key at runtime.
 
 ```apache
 <match dummy>
   @type bigquery
-  
+
   ...
-  
-  project yourproject_id
-  dataset yourdataset_id
   table   accesslog%{time_slice}
-  
   ...
 </match>
 ```
