@@ -131,9 +131,12 @@ module Fluent
 
     def initialize
       super
-      require 'json'
-      require 'google/api_client'
+      require 'multi_json'
+      require 'google/apis/bigquery_v2'
       require 'googleauth'
+      require 'active_support/json'
+      require 'active_support/core_ext/hash'
+      require 'active_support/core_ext/object/json'
 
       # MEMO: signet-0.6.1 depend on Farady.default_connection
       Faraday.default_connection.options.timeout = 60
@@ -172,7 +175,7 @@ module Fluent
 
       @fields = RecordSchema.new('record')
       if @schema_path
-        @fields.load_schema(JSON.parse(File.read(@schema_path)))
+        @fields.load_schema(MultiJson.load(File.read(@schema_path)))
       end
 
       types = %w(string integer float boolean timestamp)
@@ -221,7 +224,6 @@ module Fluent
     def start
       super
 
-      @bq = client.discovered_api("bigquery", "v2") # TODO: refresh with specified expiration
       @cached_client = nil
       @cached_client_expiration = nil
 
@@ -234,15 +236,13 @@ module Fluent
     def client
       return @cached_client if @cached_client && @cached_client_expiration > Time.now
 
-      client = Google::APIClient.new(
-        application_name: 'Fluentd BigQuery plugin',
-        application_version: Fluent::BigQueryPlugin::VERSION
-      )
+      client = Google::Apis::BigqueryV2::BigqueryService.new
 
       scope = "https://www.googleapis.com/auth/bigquery"
 
       case @auth_method
       when 'private_key'
+        require 'google/api_client/auth/key_utils'
         key = Google::APIClient::KeyUtils.load_from_pkcs12(@private_key_path, @private_key_passphrase)
         auth = Signet::OAuth2::Client.new(
                 token_credential_uri: "https://accounts.google.com/o/oauth2/token",
@@ -271,7 +271,6 @@ module Fluent
         raise ConfigError, "Unknown auth method: #{@auth_method}"
       end
 
-      auth.fetch_access_token!
       client.authorization = auth
 
       @cached_client_expiration = Time.now + 1800
@@ -282,7 +281,7 @@ module Fluent
       format, col = table_id_format.split(/@/)
       time = if col && row
                keys = col.split('.')
-               t = keys.inject(row['json']) {|obj, attr| obj[attr] }
+               t = keys.inject(row[:json]) {|obj, attr| obj[attr.to_sym] }
                Time.at(t)
              else
                current_time
@@ -301,71 +300,43 @@ module Fluent
     end
 
     def create_table(table_id)
-      res = client().execute(
-        :api_method => @bq.tables.insert,
-        :parameters => {
-          'projectId' => @project,
-          'datasetId' => @dataset,
+      client.insert_table(@project, @dataset, {
+        table_reference: {
+          table_id: table_id,
         },
-        :body_object => {
-          'tableReference' => {
-            'tableId' => table_id,
-          },
-          'schema' => {
-            'fields' => @fields.to_a,
-          },
+        schema: {
+          fields: @fields.to_a,
         }
-      )
-      unless res.success?
-        # api_error? -> client cache clear
-        @cached_client = nil
+      }, {})
+    rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
+      # api_error? -> client cache clear
+      @cached_client = nil
 
-        message = res.body
-        if res.body =~ /^\{/
-          begin
-            res_obj = JSON.parse(res.body)
-            message = res_obj['error']['message'] || res.body
-          rescue => e
-            log.warn "Parse error: google api error response body", :body => res.body
-          end
-          if res_obj and res_obj['error']['code'] == 409 and /Already Exists:/ =~ message
-            # ignore 'Already Exists' error
-            return
-          end
-        end
-        log.error "tables.insert API", :project_id => @project, :dataset => @dataset, :table => table_id, :code => res.status, :message => message
-        raise "failed to create table in bigquery" # TODO: error class
+      message = e.message
+      if e.status_code == 409 && /Already Exists:/ =~ message
+        # ignore 'Already Exists' error
+        return
       end
+      log.error "tables.insert API", :project_id => @project, :dataset => @dataset, :table => table_id, :code => e.status_code, :message => message
+      raise "failed to create table in bigquery" # TODO: error class
     end
 
     def insert(table_id, rows)
-      res = client().execute(
-        api_method: @bq.tabledata.insert_all,
-        parameters: {
-          'projectId' => @project,
-          'datasetId' => @dataset,
-          'tableId' => table_id,
-        },
-        body_object: {
-          "rows" => rows
-        }
-      )
-      unless res.success?
-        # api_error? -> client cache clear
-        @cached_client = nil
+      client.insert_all_table_data(@project, @dataset, table_id, {
+        rows: rows
+      }, {})
+    rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
+      # api_error? -> client cache clear
+      @cached_client = nil
 
-        res_obj = extract_response_obj(res.body)
-        message = res_obj['error']['message'] || res.body
-        if res_obj
-          if @auto_create_table and res_obj and res_obj['error']['code'] == 404 and /Not Found: Table/i =~ message.to_s
-            # Table Not Found: Auto Create Table
-            create_table(table_id)
-            raise "table created. send rows next time."
-          end
-        end
-        log.error "tabledata.insertAll API", project_id: @project, dataset: @dataset, table: table_id, code: res.status, message: message
-        raise "failed to insert into bigquery" # TODO: error class
+      message = e.message
+      if @auto_create_table && e.status_code == 404 && /Not Found: Table/i =~ message.to_s
+        # Table Not Found: Auto Create Table
+        create_table(table_id)
+        raise "table created. send rows next time."
       end
+      log.error "tabledata.insertAll API", project_id: @project, dataset: @dataset, table: table_id, code: e.status_code, message: message
+      raise "failed to insert into bigquery" # TODO: error class
     end
 
     def load
@@ -389,7 +360,7 @@ module Fluent
     def convert_hash_to_json(record)
       record.each do |key, value|
         if value.class == Hash
-          record[key] = value.to_json
+          record[key] = MultiJson.dump(value)
         end
       end
       record
@@ -409,7 +380,7 @@ module Fluent
       row = @fields.format(@add_time_field.call(record, time))
       unless row.empty?
         row = {"json" => row}
-        row['insertId'] = @get_insert_id.call(record) if @get_insert_id
+        row['insert_id'] = @get_insert_id.call(record) if @get_insert_id
         buf << row.to_msgpack
       end
       buf
@@ -419,7 +390,7 @@ module Fluent
       rows = []
       chunk.msgpack_each do |row_object|
         # TODO: row size limit
-        rows << row_object
+        rows << row_object.deep_symbolize_keys
       end
 
       # TODO: method
@@ -438,58 +409,17 @@ module Fluent
     def fetch_schema
       table_id_format = @tablelist[0]
       table_id = generate_table_id(table_id_format, Time.at(Fluent::Engine.now))
-      res = client.execute(
-        api_method: @bq.tables.get,
-        parameters: {
-          'projectId' => @project,
-          'datasetId' => @dataset,
-          'tableId' => table_id,
-        }
-      )
+      res = client.get_table(@project, @dataset, table_id)
 
-      unless res.success?
-        # api_error? -> client cache clear
-        @cached_client = nil
-        message = extract_error_message(res.body)
-        log.error "tables.get API", project_id: @project, dataset: @dataset, table: table_id, code: res.status, message: message
-        raise "failed to fetch schema from bigquery" # TODO: error class
-      end
-
-      res_obj = JSON.parse(res.body)
-      schema = res_obj['schema']['fields']
+      schema = res.schema.fields.as_json
       log.debug "Load schema from BigQuery: #{@project}:#{@dataset}.#{table_id} #{schema}"
       @fields.load_schema(schema, false)
-    end
-
-    # def client_oauth # not implemented
-    #   raise NotImplementedError, "OAuth needs browser authentication..."
-    #
-    #   client = Google::APIClient.new(
-    #     application_name: 'Example Ruby application',
-    #     application_version: '1.0.0'
-    #   )
-    #   bigquery = client.discovered_api('bigquery', 'v2')
-    #   flow = Google::APIClient::InstalledAppFlow.new(
-    #     client_id: @client_id
-    #     client_secret: @client_secret
-    #     scope: ['https://www.googleapis.com/auth/bigquery']
-    #   )
-    #   client.authorization = flow.authorize # browser authentication !
-    #   client
-    # end
-
-    def extract_response_obj(response_body)
-      return nil unless response_body =~ /^\{/
-      JSON.parse(response_body)
-    rescue
-      log.warn "Parse error: google api error response body", body: response_body
-      return nil
-    end
-
-    def extract_error_message(response_body)
-      res_obj = extract_response_obj(response_body)
-      return response_body if res_obj.nil?
-      res_obj['error']['message'] || response_body
+    rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
+      # api_error? -> client cache clear
+      @cached_client = nil
+      message = e.message
+      log.error "tables.get API", project_id: @project, dataset: @dataset, table: table_id, code: e.status_code, message: message
+      raise "failed to fetch schema from bigquery" # TODO: error class
     end
 
     class FieldSchema
@@ -531,9 +461,9 @@ module Fluent
 
       def to_h
         {
-          'name' => name,
-          'type' => type.to_s.upcase,
-          'mode' => mode.to_s.upcase,
+          :name => name,
+          :type => type.to_s.upcase,
+          :mode => mode.to_s.upcase,
         }
       end
     end
@@ -619,10 +549,10 @@ module Fluent
 
       def to_h
         {
-          'name' => name,
-          'type' => type.to_s.upcase,
-          'mode' => mode.to_s.upcase,
-          'fields' => self.to_a,
+          :name => name,
+          :type => type.to_s.upcase,
+          :mode => mode.to_s.upcase,
+          :fields => self.to_a,
         }
       end
 
