@@ -11,7 +11,7 @@ Gem::Specification.new do |spec|
   spec.description   = %q{Fluentd plugin to store data on Google BigQuery, by load, or by stream inserts}
   spec.summary       = %q{Fluentd plugin to store data on Google BigQuery}
   spec.homepage      = "https://github.com/kaizenplatform/fluent-plugin-bigquery"
-  spec.license       = "APLv2"
+  spec.license       = "Apache-2.0"
 
   spec.files         = `git ls-files`.split($/)
   spec.executables   = spec.files.grep(%r{^bin/}) { |f| File.basename(f) }
