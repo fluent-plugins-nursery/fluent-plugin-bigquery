@@ -20,7 +20,7 @@ Configure insert specifications with target table schema, with your credentials.
 
 ```apache
 <match dummy>
-  type bigquery
+  @type bigquery
   
   method insert    # default
   
@@ -47,7 +47,7 @@ For high rate inserts over streaming inserts, you should specify flush intervals
 
 ```apache
 <match dummy>
-  type bigquery
+  @type bigquery
   
   method insert    # default
   
@@ -127,7 +127,7 @@ download its JSON key and deploy the key with fluentd.
 
 ```apache
 <match dummy>
-  type bigquery
+  @type bigquery
   
   auth_method json_key
   json_key /home/username/.keys/00000000000000000000000000000000-jsonkey.json
@@ -144,7 +144,7 @@ You need to only include `private_key` and `client_email` key from JSON key file
 
 ```apache
 <match dummy>
-  type bigquery
+  @type bigquery
    
   auth_method json_key
   json_key {"private_key": "-----BEGIN PRIVATE KEY-----\n...", "client_email": "xxx@developer.gserviceaccount.com"}
@@ -165,7 +165,7 @@ Compute Engine instance, then you can configure fluentd like this.
 
 ```apache
 <match dummy>
-  type bigquery
+  @type bigquery
   
   auth_method compute_engine
   
@@ -208,7 +208,7 @@ data is inserted into tables `accesslog_2014_08`, `accesslog_2014_09` and so on.
 
 ```apache
 <match dummy>
-  type bigquery
+  @type bigquery
   
   ...
   
@@ -238,7 +238,7 @@ Or, the options can use `%{time_slice}` placeholder.
 
 ```apache
 <match dummy>
-  type bigquery
+  @type bigquery
   
   ...
   
@@ -259,7 +259,7 @@ NOTE: `auto_create_table` option cannot be used with `fetch_schema`. You should 
 
 ```apache
 <match dummy>
-  type bigquery
+  @type bigquery
   
   ...
   
@@ -283,7 +283,7 @@ you can also specify nested fields by prefixing their belonging record fields.
 
 ```apache
 <match dummy>
-  type bigquery
+  @type bigquery
   
   ...
   
@@ -322,7 +322,7 @@ The second method is to specify a path to a BigQuery schema file instead of list
 
 ```apache
 <match dummy>
-  type bigquery
+  @type bigquery
   
   ...
   
@@ -339,7 +339,7 @@ The third method is to set `fetch_schema` to `true` to enable fetch a schema usi
 
 ```apache
 <match dummy>
-  type bigquery
+  @type bigquery
   
   ...
   
@@ -363,7 +363,7 @@ You can set `insert_id_field` option to specify the field to use as `insertId` p
 
 ```apache
 <match dummy>
-  type bigquery
+  @type bigquery
   
   ...
   
