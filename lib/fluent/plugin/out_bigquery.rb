@@ -587,8 +587,12 @@ module Fluent
         when :nullable
           format_one(value) unless value.nil?
         when :required
-          raise "Required field #{name} cannot be null" if value.nil?
-          format_one(value)
+          if value.nil?
+            log.warn "Required field #{name} cannot be null"
+            nil
+          else
+            format_one(value)
+          end
         when :repeated
           value.nil? ? [] : value.map {|v| format_one(v) }
         end
@@ -648,12 +652,28 @@ module Fluent
     end
 
     class TimestampFieldSchema < FieldSchema
+      INTEGER_REGEXP = /\A-?[[:digit:]]+\z/.freeze
+      FLOAT_REGEXP = /\A-?[[:digit:]]+(\.[[:digit:]]+)\z/.freeze
+
       def type
         :timestamp
       end
 
       def format_one(value)
-        value
+        case value
+        when Time
+          value.strftime("%Y-%m-%d %H:%M:%S.%6L %:z")
+        when String
+          if value =~ INTEGER_REGEXP
+            value.to_i
+          elsif value =~ FLOAT_REGEXP
+            value.to_f
+          else
+            value
+          end
+        else
+          value
+        end
       end
     end
 
@@ -678,6 +698,10 @@ module Fluent
 
       def [](name)
         @fields[name]
+      end
+
+      def empty?
+        @fields.empty?
       end
 
       def to_a
@@ -735,11 +759,10 @@ module Fluent
 
       def format_one(record)
         out = {}
-        @fields.each do |key, schema|
-          value = record[key]
-          formatted = schema.format(value)
-          next if formatted.nil? # field does not exists, or null value
-          out[key] = formatted
+        record.each do |key, value|
+          next if value.nil?
+          schema = @fields[key]
+          out[key] = schema ? schema.format(value) : value
         end
         out
       end

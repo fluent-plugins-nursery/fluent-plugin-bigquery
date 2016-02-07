@@ -136,4 +136,38 @@ class RecordSchemaTest < Test::Unit::TestCase
     fields.load_schema(base_schema_with_new_column, false)
     assert { fields.to_a.as_json == base_schema_with_new_column }
   end
+
+  def test_format_one
+    fields = Fluent::BigQueryOutput::RecordSchema.new("record")
+    fields.load_schema(base_schema, false)
+
+    time = Time.local(2016, 2, 7, 19, 0, 0).utc
+
+    formatted = fields.format_one({
+      "time" => time, "tty" => nil, "pwd" => "/home", "user" => "joker1007", "argv" => ["foo", 42]
+    })
+    assert_equal(
+      formatted,
+      {
+        "time" => time.strftime("%Y-%m-%d %H:%M:%S.%6L %:z"), "pwd" => "/home", "user" => "joker1007", "argv" => ["foo", "42"]
+      }
+    )
+  end
+
+  def test_format_one_with_extra_column
+    fields = Fluent::BigQueryOutput::RecordSchema.new("record")
+    fields.load_schema(base_schema, false)
+
+    time = Time.local(2016, 2, 7, 19, 0, 0).utc
+
+    formatted = fields.format_one({
+      "time" => time, "tty" => nil, "pwd" => "/home", "user" => "joker1007", "argv" => ["foo", 42.195], "extra" => "extra_data"
+    })
+    assert_equal(
+      formatted,
+      {
+        "time" => time.strftime("%Y-%m-%d %H:%M:%S.%6L %:z"), "pwd" => "/home", "user" => "joker1007", "argv" => ["foo", "42.195"], "extra" => "extra_data"
+      }
+    )
+  end
 end

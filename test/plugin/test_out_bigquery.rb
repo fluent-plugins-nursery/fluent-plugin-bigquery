@@ -275,9 +275,15 @@ class BigQueryOutputTest < Test::Unit::TestCase
         "requesttime" => (now - 1).to_f.to_s.to_f,
         "bot_access" => true,
         "loginsession" => false,
+        "something-else" => "would be ignored",
+        "yet-another" => {
+          "foo" => "bar",
+          "baz" => 1,
+        },
         "remote" => {
           "host" => "remote.example",
           "ip" =>  "192.0.2.1",
+          "port" => 12345,
           "user" => "tagomoris",
         }
       }
@@ -429,11 +435,17 @@ class BigQueryOutputTest < Test::Unit::TestCase
         "remote" => {
           "host" => "remote.example",
           "ip" =>  "192.0.2.1",
+          "port" => 12345,
           "user" => "tagomoris",
         },
         "response" => {
           "status" => 1,
           "bytes" => 3,
+        },
+        "something-else" => "would be ignored",
+        "yet-another" => {
+          "foo" => "bar",
+          "baz" => 1,
         },
       }
     }
@@ -737,38 +749,6 @@ class BigQueryOutputTest < Test::Unit::TestCase
     driver.instance.shutdown
 
     assert_equal expected, buf
-  end
-
-  def test_empty_value_in_required
-    now = Time.now
-    input = [
-      now,
-      {
-        "tty" => "pts/1",
-        "pwd" => "/home/yugui",
-        "user" => nil,
-        "argv" => %w[ tail -f /var/log/fluentd/fluentd.log ]
-      }
-    ]
-
-    driver = create_driver(<<-CONFIG)
-      table foo
-      email foo@bar.example
-      private_key_path /path/to/key
-      project yourproject_id
-      dataset yourdataset_id
-
-      time_format %s
-      time_field  time
-
-      schema_path #{File.join(File.dirname(__FILE__), "testdata", "sudo.schema")}
-      field_integer time
-    CONFIG
-    driver.instance.start
-    assert_raises(RuntimeError.new("Required field user cannot be null")) do
-      driver.instance.format_stream("my.tag", [input])
-    end
-    driver.instance.shutdown
   end
 
   def test_replace_record_key
