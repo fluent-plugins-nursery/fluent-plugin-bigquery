@@ -92,7 +92,7 @@ module Fluent
 
     config_param :insert_id_field, :string, default: nil
 
-    config_param :method, :string, default: 'insert' # or 'load' # TODO: not implemented now
+    config_param :method, :string, default: 'insert' # or 'load'
 
     config_param :load_size_limit, :integer, default: 1000**4 # < 1TB (1024^4) # TODO: not implemented now
     ### method: 'load'
@@ -149,6 +149,14 @@ module Fluent
 
     def configure(conf)
       super
+
+      if @method == "insert"
+        extend(InsertImplementation)
+      elsif @method == "load"
+        extend(LoadImplementation)
+      else
+        raise Fluend::ConfigError "'method' must be 'insert' or 'load'"
+      end
 
       case @auth_method
       when 'private_key'
@@ -321,29 +329,6 @@ module Fluent
       raise "failed to create table in bigquery" # TODO: error class
     end
 
-    def insert(table_id, rows)
-      client.insert_all_table_data(@project, @dataset, table_id, {
-        rows: rows
-      }, {})
-    rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
-      # api_error? -> client cache clear
-      @cached_client = nil
-
-      message = e.message
-      if @auto_create_table && e.status_code == 404 && /Not Found: Table/i =~ message.to_s
-        # Table Not Found: Auto Create Table
-        create_table(table_id)
-        raise "table created. send rows next time."
-      end
-      log.error "tabledata.insertAll API", project_id: @project, dataset: @dataset, table: table_id, code: e.status_code, message: message
-      raise "failed to insert into bigquery" # TODO: error class
-    end
-
-    def load
-      # https://developers.google.com/bigquery/loading-data-into-bigquery#loaddatapostrequest
-      raise NotImplementedError # TODO
-    end
-
     def replace_record_key(record)
       new_record = {}
       record.each do |key, _|
@@ -366,44 +351,13 @@ module Fluent
       record
     end
 
-    def format(tag, time, record)
-      buf = ''
-
-      if @replace_record_key
-        record = replace_record_key(record)
-      end
-
-      if @convert_hash_to_json
-        record = convert_hash_to_json(record)
-      end
-
-      row = @fields.format(@add_time_field.call(record, time))
-      unless row.empty?
-        row = {"json" => row}
-        row['insert_id'] = @get_insert_id.call(record) if @get_insert_id
-        buf << row.to_msgpack
-      end
-      buf
-    end
-
     def write(chunk)
-      rows = []
-      chunk.msgpack_each do |row_object|
-        # TODO: row size limit
-        rows << row_object.deep_symbolize_keys
-      end
-
-      # TODO: method
-
-      insert_table_format = @tables_mutex.synchronize do
+      table_id_format = @tables_mutex.synchronize do
         t = @tables_queue.shift
         @tables_queue.push t
         t
       end
-
-      rows.group_by {|row| generate_table_id(insert_table_format, Time.at(Fluent::Engine.now), row, chunk) }.each do |table_id, rows|
-        insert(table_id, rows)
-      end
+      _write(chunk, table_id_format)
     end
 
     def fetch_schema
@@ -420,6 +374,137 @@ module Fluent
       message = e.message
       log.error "tables.get API", project_id: @project, dataset: @dataset, table: table_id, code: e.status_code, message: message
       raise "failed to fetch schema from bigquery" # TODO: error class
+    end
+
+    module InsertImplementation
+      def format(tag, time, record)
+        buf = ''
+
+        if @replace_record_key
+          record = replace_record_key(record)
+        end
+
+        if @convert_hash_to_json
+          record = convert_hash_to_json(record)
+        end
+
+        row = @fields.format(@add_time_field.call(record, time))
+        unless row.empty?
+          row = {"json" => row}
+          row['insert_id'] = @get_insert_id.call(record) if @get_insert_id
+          buf << row.to_msgpack
+        end
+        buf
+      end
+
+      def _write(chunk, table_format)
+        rows = []
+        chunk.msgpack_each do |row_object|
+          # TODO: row size limit
+          rows << row_object.deep_symbolize_keys
+        end
+
+        rows.group_by {|row| generate_table_id(table_format, Time.at(Fluent::Engine.now), row, chunk) }.each do |table_id, group|
+          insert(table_id, group)
+        end
+      end
+
+      def insert(table_id, rows)
+        client.insert_all_table_data(@project, @dataset, table_id, {
+          rows: rows
+        }, {})
+      rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
+        # api_error? -> client cache clear
+        @cached_client = nil
+
+        message = e.message
+        if @auto_create_table && e.status_code == 404 && /Not Found: Table/i =~ message.to_s
+          # Table Not Found: Auto Create Table
+          create_table(table_id)
+          raise "table created. send rows next time."
+        end
+        log.error "tabledata.insertAll API", project_id: @project, dataset: @dataset, table: table_id, code: e.status_code, message: message
+        raise "failed to insert into bigquery" # TODO: error class
+      end
+    end
+
+    module LoadImplementation
+      def format(tag, time, record)
+        buf = ''
+
+        if @replace_record_key
+          record = replace_record_key(record)
+        end
+        row = @fields.format(@add_time_field.call(record, time))
+        unless row.empty?
+          buf << MultiJson.dump(row) + "\n"
+        end
+        buf
+      end
+
+      def _write(chunk, table_id_format)
+        table_id = generate_table_id(table_id_format, Time.at(Fluent::Engine.now), nil, chunk)
+        load(chunk, table_id)
+      end
+
+      def load(chunk, table_id)
+        res = nil
+        create_upload_source(chunk) do |upload_source|
+          res = client.insert_job(@project, {
+            configuration: {
+              load: {
+                destination_table: {
+                  project_id: @project,
+                  dataset_id: @dataset,
+                  table_id: table_id,
+                },
+                schema: {
+                  fields: @fields.to_a,
+                },
+                write_disposition: "WRITE_APPEND",
+                source_format: "NEWLINE_DELIMITED_JSON"
+              }
+            }
+          }, {upload_source: upload_source, content_type: "application/octet-stream"})
+        end
+        wait_load(res, table_id)
+      end
+
+      private
+
+      def wait_load(res, table_id)
+        wait_interval = 10
+        _response = res
+        until _response.status.state == "DONE"
+          log.debug "wait for load job finish", state: _response.status.state
+          sleep wait_interval
+          _response = client.get_job(@project, _response.job_reference.job_id)
+        end
+
+        if _response.status.error_result
+          log.error "job.insert API", project_id: @project, dataset: @dataset, table: table_id, message: _response.status.error_result.message
+          raise "failed to load into bigquery"
+        end
+
+        log.debug "finish load job", state: _response.status.state
+      end
+
+      def create_upload_source(chunk)
+        chunk_is_file = @buffer_type == 'file'
+        if chunk_is_file
+          File.open(chunk.path) do |file|
+            yield file
+          end
+        else
+          Tempfile.open("chunk-tmp") do |file|
+            file.binmode
+            chunk.write_to(file)
+            file.sync
+            file.rewind
+            yield file
+          end
+        end
+      end
     end
 
     class FieldSchema
