@@ -1024,6 +1024,25 @@ class BigQueryOutputTest < Test::Unit::TestCase
     assert_equal 'foo_20140811', table_id
   end
 
+  def test_generate_table_id_with_attribute_replacement
+    driver = create_driver
+    table_id_format = 'foo_%Y_%m_%d_${baz}'
+    current_time = Time.now
+    time = Time.local(2014, 8, 11, 21, 20, 56)
+    [
+      [ { baz: 1234 },         'foo_2014_08_11_1234' ],
+      [ { baz: 'piyo' },       'foo_2014_08_11_piyo' ],
+      [ { baz: true },         'foo_2014_08_11_true' ],
+      [ { baz: nil },          'foo_2014_08_11_' ],
+      [ { baz: '' },           'foo_2014_08_11_' ],
+      [ { baz: "_X-Y.Z !\n" }, 'foo_2014_08_11__XYZ' ],
+      [ { baz: { xyz: 1 } },   'foo_2014_08_11_xyz1' ],
+    ].each do |attrs, expected|
+      row = { json: { created_at: Time.local(2014,8,10,21,20,57).to_i }.merge(attrs) }
+      table_id = driver.instance.generate_table_id(table_id_format, time, row)
+      assert_equal expected, table_id
+    end
+  end
 
   def test_auto_create_table_by_bigquery_api
     now = Time.now
