@@ -282,6 +282,25 @@ Or, the options can use `%{time_slice}` placeholder.
 </match>
 ```
 
+#### record attribute value formatting
+Or, `${attr_name}` placeholder is available to use value of attribute as part of table id.
+`${attr_name}` is replaced by string value of the attribute specified by `attr_name`.
+
+__NOTE: This feature is available only if `method` is `insert`.__
+
+```apache
+<match dummy>
+  ...
+  table   accesslog_%Y_%m_${subdomain}
+  ...
+</match>
+```
+
+For example value of `subdomain` attribute is `"bq.fluent"`, table id will be like "accesslog_2016_03_bqfluent".
+
+- any type of attribute is allowed because stringified value will be used as replacement.
+- acceptable characters are alphabets, digits and `_`. All other characters will be removed.
+
 ### Dynamic table creating
 
 When `auto_create_table` is set to `true`, try to create the table using BigQuery API when insertion failed with code=404 "Not Found: Table ...".

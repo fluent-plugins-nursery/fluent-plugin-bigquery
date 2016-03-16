@@ -294,6 +294,12 @@ module Fluent
              else
                current_time
              end
+      if row && format =~ /\$\{/
+        json = row[:json]
+        format.gsub!(/\$\{\s*(\w+)\s*\}/) do |m|
+          row[:json][$1.to_sym].to_s.gsub(/[^\w]/, '')
+        end
+      end
       table_id = time.strftime(format)
 
       if chunk
