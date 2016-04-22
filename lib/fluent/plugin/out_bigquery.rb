@@ -171,7 +171,7 @@ module Fluent
       elsif @method == "load"
         extend(LoadImplementation)
       else
-        raise Fluend::ConfigError "'method' must be 'insert' or 'load'"
+        raise Fluent::ConfigError "'method' must be 'insert' or 'load'"
       end
 
       case @auth_method
