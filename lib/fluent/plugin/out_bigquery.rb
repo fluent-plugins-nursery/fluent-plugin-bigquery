@@ -130,6 +130,14 @@ module Fluent
     #                          If you exceed 100 rows per second for an extended period of time, throttling might occur.
     ### Toooooooooooooo short/small per inserts and row!
 
+    ## Timeout
+    # request_timeout_sec
+    #   Bigquery API response timeout
+    # request_open_timeout_sec
+    #   Bigquery API connection, and request timeout
+    config_param :request_timeout_sec, :time, default: nil
+    config_param :request_open_timeout_sec, :time, default: 60
+
     ### Table types
     # https://developers.google.com/bigquery/docs/tables
     #
@@ -467,7 +475,9 @@ module Fluent
           ignore_unknown_values: @ignore_unknown_values,
         }
         body.merge!(template_suffix: template_suffix) if template_suffix
-        client.insert_all_table_data(@project, @dataset, table_id, body, {})
+        client.insert_all_table_data(@project, @dataset, table_id, body, {
+          options: {timeout_sec: @request_timeout_sec, open_timeout_sec: @request_open_timeout_sec}
+        })
       rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
         # api_error? -> client cache clear
         @cached_client = nil
@@ -515,7 +525,18 @@ module Fluent
         res = nil
         create_upload_source(chunk) do |upload_source|
           configuration = load_configuration(table_id, template_suffix)
-          res = client.insert_job(@project, configuration, {upload_source: upload_source, content_type: "application/octet-stream"})
+          res = client.insert_job(
+            @project,
+            configuration,
+            {
+              upload_source: upload_source,
+              content_type: "application/octet-stream",
+              options: {
+                timeout_sec: @request_timeout_sec,
+                open_timeout_sec: @request_open_timeout_sec,
+              }
+            }
+          )
         end
         wait_load(res, table_id)
       rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
