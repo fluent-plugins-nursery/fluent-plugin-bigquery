@@ -106,7 +106,10 @@ module Fluent
     config_param :utc, :bool, default: nil
     config_param :time_field, :string, default: nil
 
+    # insert_id_field (only insert)
     config_param :insert_id_field, :string, default: nil
+    # prevent_duplicate_load (only load)
+    config_param :prevent_duplicate_load, :bool, default: false
 
     config_param :method, :string, default: 'insert' # or 'load'
 
@@ -523,8 +526,9 @@ module Fluent
 
       def load(chunk, table_id, template_suffix)
         res = nil
+        job_id = nil
         create_upload_source(chunk) do |upload_source|
-          configuration = load_configuration(table_id, template_suffix)
+          configuration, job_id = load_configuration(table_id, template_suffix, upload_source)
           res = client.insert_job(
             @project,
             configuration,
@@ -545,7 +549,10 @@ module Fluent
 
         reason = e.respond_to?(:reason) ? e.reason : nil
         log.error "job.load API", project_id: @project, dataset: @dataset, table: table_id, code: e.status_code, message: e.message, reason: reason
-        if RETRYABLE_ERROR_REASON.include?(reason)
+
+        return wait_load(job_id) if job_id && e.status_code == 409 && e.message =~ /Job/ # duplicate load job
+
+        if RETRYABLE_ERROR_REASON.include?(reason) || e.is_a?(Google::Apis::ServerError)
           raise "failed to insert into bigquery, retry" # TODO: error class
         elsif @secondary
           flush_secondary(@secondary)
@@ -554,7 +561,12 @@ module Fluent
 
       private
 
-      def load_configuration(table_id, template_suffix)
+      def load_configuration(table_id, template_suffix, upload_source)
+        job_id = nil
+        if @prevent_duplicate_load
+          job_id = create_job_id(upload_source, @dataset, "#{table_id}#{template_suffix}", @fields.to_a, @max_bad_records, @ignore_unknown_values)
+        end
+
         configuration = {
           configuration: {
             load: {
@@ -573,6 +585,7 @@ module Fluent
             }
           }
         }
+        configuration.merge!({job_reference: {project_id: @project, job_id: job_id}}) if job_id
 
         # If target table is already exist, omit schema configuration.
         # Because schema changing is easier.
@@ -584,7 +597,7 @@ module Fluent
           raise "Schema is empty" if @fields.empty?
         end
 
-        configuration
+        return configuration, job_id
       end
 
       def wait_load(res, table_id)
@@ -606,7 +619,7 @@ module Fluent
         error_result = _response.status.error_result
         if error_result
           log.error "job.load API (result)", project_id: @project, dataset: @dataset, table: table_id, message: error_result.message, reason: error_result.reason
-          if RETRYABLE_ERROR_REASON.include?(_response.status.error_result.reason)
+          if RETRYABLE_ERROR_REASON.include?(error_result.reason)
             raise "failed to load into bigquery"
           elsif @secondary
             flush_secondary(@secondary)
@@ -631,6 +644,17 @@ module Fluent
             yield file
           end
         end
+      end
+
+      def create_job_id(upload_source, dataset, table, schema, max_bad_records, ignore_unknown_values)
+        # OPTIMIZE: for memory buffer,  but it is inefficient
+        if upload_source.respond_to?(:path)
+          base_digest = Digest::SHA1.hexdigest(upload_source.path)
+        else
+          base_digest = Digest::SHA1.hexdigest(upload_source.read)
+          upload_source.rewind
+        end
+        "fluentd_job_" + Digest::SHA1.hexdigest("#{base_digest}#{dataset}#{table}#{schema.to_s}#{max_bad_records}#{ignore_unknown_values}")
       end
     end
 

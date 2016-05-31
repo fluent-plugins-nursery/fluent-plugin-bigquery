@@ -1031,6 +1031,71 @@ class BigQueryOutputTest < Test::Unit::TestCase
     driver.instance.shutdown
   end
 
+  def test_write_for_load_with_prevent_duplicate_load
+    schema_path = File.join(File.dirname(__FILE__), "testdata", "sudo.schema")
+    entry = {a: "b"}, {b: "c"}
+    driver = create_driver(<<-CONFIG)
+      method load
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      time_format %s
+      time_field  time
+
+      schema_path #{schema_path}
+      field_integer time
+      prevent_duplicate_load true
+    CONFIG
+    schema_fields = MultiJson.load(File.read(schema_path)).map(&:deep_symbolize_keys).tap do |h|
+      h[0][:type] = "INTEGER"
+      h[0][:mode] = "NULLABLE"
+    end
+
+    chunk = Fluent::MemoryBufferChunk.new("my.tag")
+    io = StringIO.new("hello")
+    mock(driver.instance).create_upload_source(chunk).yields(io)
+    mock_client(driver) do |expect|
+      expect.insert_job('yourproject_id', {
+        configuration: {
+          load: {
+            destination_table: {
+              project_id: 'yourproject_id',
+              dataset_id: 'yourdataset_id',
+              table_id: 'foo',
+            },
+            schema: {
+              fields: schema_fields,
+            },
+            write_disposition: "WRITE_APPEND",
+            source_format: "NEWLINE_DELIMITED_JSON",
+            ignore_unknown_values: false,
+            max_bad_records: 0,
+          },
+        },
+        job_reference: {project_id: 'yourproject_id', job_id: "fluentd_job_150bce35c54f3dd0de9252b4917ef542d221c53a"},
+      }, {upload_source: io, content_type: "application/octet-stream", options: {timeout_sec: nil, open_timeout_sec: 60}}) {
+        s = stub!
+        status_stub = stub!
+        s.status { status_stub }
+        status_stub.state { "DONE" }
+        status_stub.error_result { nil }
+        status_stub.errors { nil }
+        s
+      }
+    end
+
+    entry.each do |e|
+      chunk << MultiJson.dump(e) + "\n"
+    end
+
+    driver.instance.start
+    driver.instance.write(chunk)
+    driver.instance.shutdown
+  end
+
   def test_write_for_load_with_retryable_error
     schema_path = File.join(File.dirname(__FILE__), "testdata", "sudo.schema")
     entry = {a: "b"}, {b: "c"}
