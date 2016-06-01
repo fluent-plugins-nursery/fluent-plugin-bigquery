@@ -29,6 +29,7 @@ require 'fluent/plugin/buf_file'
 require 'fluent/plugin/out_bigquery'
 
 require 'rr'
+require 'test/unit/rr'
 
 class Test::Unit::TestCase
 end
