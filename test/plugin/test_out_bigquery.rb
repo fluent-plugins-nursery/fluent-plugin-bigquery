@@ -993,6 +993,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
     chunk = Fluent::MemoryBufferChunk.new("my.tag")
     io = StringIO.new("hello")
     mock(driver.instance).create_upload_source(chunk).yields(io)
+    mock(driver.instance).wait_load("dummy_job_id", "foo") { true }
     mock_client(driver) do |expect|
       expect.insert_job('yourproject_id', {
         configuration: {
@@ -1013,11 +1014,9 @@ class BigQueryOutputTest < Test::Unit::TestCase
         }
       }, {upload_source: io, content_type: "application/octet-stream", options: {timeout_sec: nil, open_timeout_sec: 60}}) {
         s = stub!
-        status_stub = stub!
-        s.status { status_stub }
-        status_stub.state { "DONE" }
-        status_stub.error_result { nil }
-        status_stub.errors { nil }
+        job_reference_stub = stub!
+        s.job_reference { job_reference_stub }
+        job_reference_stub.job_id { "dummy_job_id" }
         s
       }
     end
@@ -1057,6 +1056,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
     chunk = Fluent::MemoryBufferChunk.new("my.tag")
     io = StringIO.new("hello")
     mock(driver.instance).create_upload_source(chunk).yields(io)
+    mock(driver.instance).wait_load("dummy_job_id", "foo") { true }
     mock_client(driver) do |expect|
       expect.insert_job('yourproject_id', {
         configuration: {
@@ -1078,11 +1078,9 @@ class BigQueryOutputTest < Test::Unit::TestCase
         job_reference: {project_id: 'yourproject_id', job_id: satisfy { |x| x =~ /fluentd_job_.*/}} ,
       }, {upload_source: io, content_type: "application/octet-stream", options: {timeout_sec: nil, open_timeout_sec: 60}}) {
         s = stub!
-        status_stub = stub!
-        s.status { status_stub }
-        status_stub.state { "DONE" }
-        status_stub.error_result { nil }
-        status_stub.errors { nil }
+        job_reference_stub = stub!
+        s.job_reference { job_reference_stub }
+        job_reference_stub.job_id { "dummy_job_id" }
         s
       }
     end
@@ -1140,6 +1138,14 @@ class BigQueryOutputTest < Test::Unit::TestCase
           }
         }
       }, {upload_source: io, content_type: "application/octet-stream", options: {timeout_sec: nil, open_timeout_sec: 60}}) {
+        s = stub!
+        job_reference_stub = stub!
+        s.job_reference { job_reference_stub }
+        job_reference_stub.job_id { "dummy_job_id" }
+        s
+      }
+
+      expect.get_job('yourproject_id', 'dummy_job_id') {
         s = stub!
         status_stub = stub!
         error_result = stub!
@@ -1214,6 +1220,14 @@ class BigQueryOutputTest < Test::Unit::TestCase
           }
         }
       }, {upload_source: io, content_type: "application/octet-stream", options: {timeout_sec: nil, open_timeout_sec: 60}}) {
+        s = stub!
+        job_reference_stub = stub!
+        s.job_reference { job_reference_stub }
+        job_reference_stub.job_id { "dummy_job_id" }
+        s
+      }
+
+      expect.get_job('yourproject_id', 'dummy_job_id') {
         s = stub!
         status_stub = stub!
         error_result = stub!

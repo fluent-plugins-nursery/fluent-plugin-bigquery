@@ -542,7 +542,7 @@ module Fluent
             }
           )
         end
-        wait_load(res, table_id)
+        wait_load(res.job_reference.job_id, table_id)
       rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
         # api_error? -> client cache clear
         @cached_client = nil
@@ -550,7 +550,7 @@ module Fluent
         reason = e.respond_to?(:reason) ? e.reason : nil
         log.error "job.load API", project_id: @project, dataset: @dataset, table: table_id, code: e.status_code, message: e.message, reason: reason
 
-        return wait_load(job_id) if job_id && e.status_code == 409 && e.message =~ /Job/ # duplicate load job
+        return wait_load(job_id, table_id) if job_id && e.status_code == 409 && e.message =~ /Job/ # duplicate load job
 
         if RETRYABLE_ERROR_REASON.include?(reason) || e.is_a?(Google::Apis::ServerError)
           raise "failed to insert into bigquery, retry" # TODO: error class
@@ -600,11 +600,12 @@ module Fluent
         return configuration, job_id
       end
 
-      def wait_load(res, table_id)
+      def wait_load(job_id, table_id)
         wait_interval = 10
-        _response = res
+        _response = client.get_job(@project, job_id)
+
         until _response.status.state == "DONE"
-          log.debug "wait for load job finish", state: _response.status.state
+          log.debug "wait for load job finish", state: _response.status.state, job_id: _response.job_reference.job_id
           sleep wait_interval
           _response = client.get_job(@project, _response.job_reference.job_id)
         end
@@ -612,13 +613,13 @@ module Fluent
         errors = _response.status.errors
         if errors
           errors.each do |e|
-            log.error "job.load API (rows)", project_id: @project, dataset: @dataset, table: table_id, message: e.message, reason: e.reason
+            log.error "job.insert API (rows)", job_id: job_id, project_id: @project, dataset: @dataset, table: table_id, message: e.message, reason: e.reason
           end
         end
 
         error_result = _response.status.error_result
         if error_result
-          log.error "job.load API (result)", project_id: @project, dataset: @dataset, table: table_id, message: error_result.message, reason: error_result.reason
+          log.error "job.insert API (result)", job_id: job_id, project_id: @project, dataset: @dataset, table: table_id, message: error_result.message, reason: error_result.reason
           if RETRYABLE_ERROR_REASON.include?(error_result.reason)
             raise "failed to load into bigquery"
           elsif @secondary
