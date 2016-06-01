@@ -139,7 +139,7 @@ __CAUTION: `flush_interval` default is still `0.25` even if `method` is `load` o
 
 ### Authentication
 
-There are two methods supported to fetch access token for the service account.
+There are four methods supported to fetch access token for the service account.
 
 1. Public-Private key pair of GCP(Google Cloud Platform)'s service account
 2. JSON key of GCP(Google Cloud Platform)'s service account
