@@ -19,14 +19,26 @@ module Fluent
     # https://developers.google.com/bigquery/browser-tool-quickstart
     # https://developers.google.com/bigquery/bigquery-api-quickstart
 
-    config_set_default :buffer_type, 'lightening'
+    ### default for insert
+    def configure_for_insert(conf)
+      raise ConfigError unless conf["method"] != "load"
 
-    config_set_default :flush_interval, 0.25
-    config_set_default :try_flush_interval, 0.05
+      conf["buffer_type"]                = "lightening"  unless conf["buffer_type"]
+      conf["flush_interval"]             = 0.25          unless conf["flush_interval"]
+      conf["try_flush_interval"]         = 0.05          unless conf["try_flush_interval"]
+      conf["buffer_chunk_limit"]         = 1 * 1024 ** 2 unless conf["buffer_chunk_limit"] # 1MB
+      conf["buffer_queue_limit"]         = 1024          unless conf["buffer_queue_limit"]
+      conf["buffer_chunk_records_limit"] = 500           unless conf["buffer_chunk_records_limit"]
+    end
 
-    config_set_default :buffer_chunk_records_limit, 500
-    config_set_default :buffer_chunk_limit, 1000000
-    config_set_default :buffer_queue_limit, 1024
+    ### default for loads
+    def configure_for_load(conf)
+      raise ConfigError unless conf["method"] == "load"
+
+      # buffer_type, flush_interval, try_flush_interval is TimeSlicedOutput default
+      conf["buffer_chunk_limit"] = 1 * 1024 ** 3 unless conf["buffer_chunk_limit"] # 1GB
+      conf["buffer_queue_limit"] = 32            unless conf["buffer_queue_limit"]
+    end
 
     ### for loads
     ### TODO: different default values for buffering between 'load' and insert
@@ -177,6 +189,11 @@ module Fluent
     end
 
     def configure(conf)
+      if conf["method"] == "load"
+        configure_for_load(conf)
+      else
+        configure_for_insert(conf)
+      end
       super
 
       if @method == "insert"
