@@ -852,8 +852,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
     driver = create_driver(CONFIG)
     mock_client(driver) do |expect|
       expect.insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo', {
-        rows: entry
-      }, {}) {
+        rows: entry,
+        skip_invalid_rows: false,
+        ignore_unknown_values: false
+      }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) {
         s = stub!
         s.insert_errors { nil }
         s
@@ -894,8 +896,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
     CONFIG
     mock_client(driver) do |expect|
       expect.insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo', {
-        rows: entry
-      }, {}) {
+        rows: entry,
+        skip_invalid_rows: false,
+        ignore_unknown_values: false
+      }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) {
         ex = Google::Apis::ServerError.new("error")
         def ex.reason
           "backendError"
@@ -940,8 +944,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
     CONFIG
     mock_client(driver) do |expect|
       expect.insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo', {
-        rows: entry
-      }, {}) {
+        rows: entry,
+        skip_invalid_rows: false,
+        ignore_unknown_values: false
+      }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) {
         ex = Google::Apis::ServerError.new("error")
         def ex.reason
           "invalid"
@@ -1000,10 +1006,12 @@ class BigQueryOutputTest < Test::Unit::TestCase
               fields: schema_fields,
             },
             write_disposition: "WRITE_APPEND",
-            source_format: "NEWLINE_DELIMITED_JSON"
+            source_format: "NEWLINE_DELIMITED_JSON",
+            ignore_unknown_values: false,
+            max_bad_records: 0,
           }
         }
-      }, {upload_source: io, content_type: "application/octet-stream"}) {
+      }, {upload_source: io, content_type: "application/octet-stream", options: {timeout_sec: nil, open_timeout_sec: 60}}) {
         s = stub!
         status_stub = stub!
         s.status { status_stub }
@@ -1061,10 +1069,12 @@ class BigQueryOutputTest < Test::Unit::TestCase
               fields: schema_fields,
             },
             write_disposition: "WRITE_APPEND",
-            source_format: "NEWLINE_DELIMITED_JSON"
+            source_format: "NEWLINE_DELIMITED_JSON",
+            ignore_unknown_values: false,
+            max_bad_records: 0,
           }
         }
-      }, {upload_source: io, content_type: "application/octet-stream"}) {
+      }, {upload_source: io, content_type: "application/octet-stream", options: {timeout_sec: nil, open_timeout_sec: 60}}) {
         s = stub!
         status_stub = stub!
         error_result = stub!
@@ -1133,10 +1143,12 @@ class BigQueryOutputTest < Test::Unit::TestCase
               fields: schema_fields,
             },
             write_disposition: "WRITE_APPEND",
-            source_format: "NEWLINE_DELIMITED_JSON"
+            source_format: "NEWLINE_DELIMITED_JSON",
+            ignore_unknown_values: false,
+            max_bad_records: 0,
           }
         }
-      }, {upload_source: io, content_type: "application/octet-stream"}) {
+      }, {upload_source: io, content_type: "application/octet-stream", options: {timeout_sec: nil, open_timeout_sec: 60}}) {
         s = stub!
         status_stub = stub!
         error_result = stub!
@@ -1184,12 +1196,16 @@ class BigQueryOutputTest < Test::Unit::TestCase
     CONFIG
     mock_client(driver) do |expect|
       expect.insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo_2014_08_20', {
-        rows: [entry[0]]
-      }, {}) { stub!.insert_errors { nil } }
+        rows: [entry[0]],
+        skip_invalid_rows: false,
+        ignore_unknown_values: false
+      }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) { stub!.insert_errors { nil } }
 
       expect.insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo_2014_08_21', {
-        rows: [entry[1]]
-      }, {}) { stub!.insert_errors { nil } }
+        rows: [entry[1]],
+        skip_invalid_rows: false,
+        ignore_unknown_values: false
+      }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) { stub!.insert_errors { nil } }
     end
 
     chunk = Fluent::MemoryBufferChunk.new("my.tag")
@@ -1303,8 +1319,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
     CONFIG
     mock_client(driver) do |expect|
       expect.insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo', {
-        rows: [message]
-      }, {}) {
+        rows: [message],
+        skip_invalid_rows: false,
+        ignore_unknown_values: false
+      }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) {
         raise Google::Apis::ServerError.new("Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404, body: "Not found: Table yourproject_id:yourdataset_id.foo")
       }
       expect.insert_table('yourproject_id', 'yourdataset_id', {
