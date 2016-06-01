@@ -528,7 +528,7 @@ module Fluent
         res = nil
         job_id = nil
         create_upload_source(chunk) do |upload_source|
-          configuration, job_id = load_configuration(table_id, template_suffix, upload_source)
+          configuration, job_id = load_configuration(table_id, template_suffix, chunk)
           res = client.insert_job(
             @project,
             configuration,
@@ -561,10 +561,10 @@ module Fluent
 
       private
 
-      def load_configuration(table_id, template_suffix, upload_source)
+      def load_configuration(table_id, template_suffix, chunk)
         job_id = nil
         if @prevent_duplicate_load
-          job_id = create_job_id(upload_source, @dataset, "#{table_id}#{template_suffix}", @fields.to_a, @max_bad_records, @ignore_unknown_values)
+          job_id = create_job_id(chunk, @dataset, "#{table_id}#{template_suffix}", @fields.to_a, @max_bad_records, @ignore_unknown_values)
         end
 
         configuration = {
@@ -646,15 +646,8 @@ module Fluent
         end
       end
 
-      def create_job_id(upload_source, dataset, table, schema, max_bad_records, ignore_unknown_values)
-        # OPTIMIZE: for memory buffer,  but it is inefficient
-        if upload_source.respond_to?(:path)
-          base_digest = Digest::SHA1.hexdigest(upload_source.path)
-        else
-          base_digest = Digest::SHA1.hexdigest(upload_source.read)
-          upload_source.rewind
-        end
-        "fluentd_job_" + Digest::SHA1.hexdigest("#{base_digest}#{dataset}#{table}#{schema.to_s}#{max_bad_records}#{ignore_unknown_values}")
+      def create_job_id(chunk, dataset, table, schema, max_bad_records, ignore_unknown_values)
+        "fluentd_job_" + Digest::SHA1.hexdigest("#{chunk.unique_id}#{dataset}#{table}#{schema.to_s}#{max_bad_records}#{ignore_unknown_values}")
       end
     end
 

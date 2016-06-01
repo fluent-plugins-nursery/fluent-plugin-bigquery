@@ -1075,7 +1075,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
             max_bad_records: 0,
           },
         },
-        job_reference: {project_id: 'yourproject_id', job_id: "fluentd_job_150bce35c54f3dd0de9252b4917ef542d221c53a"},
+        job_reference: {project_id: 'yourproject_id', job_id: satisfy { |x| x =~ /fluentd_job_.*/}} ,
       }, {upload_source: io, content_type: "application/octet-stream", options: {timeout_sec: nil, open_timeout_sec: 60}}) {
         s = stub!
         status_stub = stub!
