@@ -743,6 +743,8 @@ class BigQueryOutputTest < Test::Unit::TestCase
       dataset yourdataset_id
 
       field_string uuid
+
+      buffer_type memory
     CONFIG
     driver.instance.start
     buf = driver.instance.format_stream("my.tag", [input])
@@ -984,6 +986,8 @@ class BigQueryOutputTest < Test::Unit::TestCase
 
       schema_path #{schema_path}
       field_integer time
+
+      buffer_type memory
     CONFIG
     schema_fields = MultiJson.load(File.read(schema_path)).map(&:deep_symbolize_keys).tap do |h|
       h[0][:type] = "INTEGER"
@@ -1047,6 +1051,8 @@ class BigQueryOutputTest < Test::Unit::TestCase
       schema_path #{schema_path}
       field_integer time
       prevent_duplicate_load true
+
+      buffer_type memory
     CONFIG
     schema_fields = MultiJson.load(File.read(schema_path)).map(&:deep_symbolize_keys).tap do |h|
       h[0][:type] = "INTEGER"
@@ -1110,6 +1116,8 @@ class BigQueryOutputTest < Test::Unit::TestCase
 
       schema_path #{schema_path}
       field_integer time
+
+      buffer_type memory
     CONFIG
     schema_fields = MultiJson.load(File.read(schema_path)).map(&:deep_symbolize_keys).tap do |h|
       h[0][:type] = "INTEGER"
@@ -1187,6 +1195,8 @@ class BigQueryOutputTest < Test::Unit::TestCase
 
       schema_path #{schema_path}
       field_integer time
+
+      buffer_type memory
       <secondary>
         type file
         path error
