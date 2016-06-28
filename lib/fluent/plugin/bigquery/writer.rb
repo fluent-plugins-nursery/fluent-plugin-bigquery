@@ -40,14 +40,6 @@ module Fluent
         end
       end
 
-      class DuplicateJobError < Error
-        attr_reader :job_id
-        def initialize(message, job_id, origin = nil)
-          @job_id = job_id
-          super(message, origin)
-        end
-      end
-
       def initialize(log, auth_method, auth_options = {})
         @auth_method = auth_method
         @scope = "https://www.googleapis.com/auth/bigquery"
