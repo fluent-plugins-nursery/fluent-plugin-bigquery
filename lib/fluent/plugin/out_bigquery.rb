@@ -6,6 +6,7 @@ require 'fluent/mixin/config_placeholders'
 require 'fluent/mixin/plaintextformatter'
 
 require 'fluent/plugin/bigquery/schema'
+require 'fluent/plugin/bigquery/writer'
 
 ## TODO: load implementation
 # require 'fluent/plugin/bigquery/load_request_body_wrapper'
@@ -170,8 +171,6 @@ module Fluent
     # REQUIRED - The cell cannot be null.
     # REPEATED - Zero or more repeated simple or nested subfields. This mode is only supported when using JSON source files.
 
-    RETRYABLE_ERROR_REASON = %w(backendError internalError rateLimitExceeded tableUnavailable).freeze
-
     def initialize
       super
       require 'multi_json'
@@ -183,11 +182,6 @@ module Fluent
 
       # MEMO: signet-0.6.1 depend on Farady.default_connection
       Faraday.default_connection.options.timeout = 60
-    end
-
-    # Define `log` method for v0.10.42 or earlier
-    unless method_defined?(:log)
-      define_method("log") { $log }
     end
 
     def configure(conf)
@@ -280,9 +274,6 @@ module Fluent
     def start
       super
 
-      @cached_client = nil
-      @cached_client_expiration = nil
-
       @tables_queue = @tablelist.dup.shuffle
       @tables_mutex = Mutex.new
       @fetch_schema_mutex = Mutex.new
@@ -291,48 +282,12 @@ module Fluent
       fetch_schema(false) if @fetch_schema
     end
 
-    def client
-      return @cached_client if @cached_client && @cached_client_expiration > Time.now
-
-      client = Google::Apis::BigqueryV2::BigqueryService.new
-
-      scope = "https://www.googleapis.com/auth/bigquery"
-
-      case @auth_method
-      when 'private_key'
-        require 'google/api_client/auth/key_utils'
-        key = Google::APIClient::KeyUtils.load_from_pkcs12(@private_key_path, @private_key_passphrase)
-        auth = Signet::OAuth2::Client.new(
-                token_credential_uri: "https://accounts.google.com/o/oauth2/token",
-                audience: "https://accounts.google.com/o/oauth2/token",
-                scope: scope,
-                issuer: @email,
-                signing_key: key)
-
-      when 'compute_engine'
-        auth = Google::Auth::GCECredentials.new
-
-      when 'json_key'
-        if File.exist?(@json_key)
-          auth = File.open(@json_key) do |f|
-            Google::Auth::ServiceAccountCredentials.make_creds(json_key_io: f, scope: scope)
-          end
-        else
-          key = StringIO.new(@json_key)
-          auth = Google::Auth::ServiceAccountCredentials.make_creds(json_key_io: key, scope: scope)
-        end
-
-      when 'application_default'
-        auth = Google::Auth.get_application_default([scope])
-
-      else
-        raise ConfigError, "Unknown auth method: #{@auth_method}"
-      end
-
-      client.authorization = auth
-
-      @cached_client_expiration = Time.now + 1800
-      @cached_client = client
+    def writer
+      @writer ||= Fluent::BigQuery::Writer.new(@log, @auth_method, {
+        private_key_path: @private_key_path, private_key_passphrase: @private_key_passphrase,
+        email: @email,
+        json_key: @json_key,
+      })
     end
 
     def generate_table_id(table_id_format, current_time, row = nil, chunk = nil)
@@ -360,28 +315,6 @@ module Fluent
           current_time.strftime(@time_slice_format)
         }
       end
-    end
-
-    def create_table(table_id)
-      client.insert_table(@project, @dataset, {
-        table_reference: {
-          table_id: table_id,
-        },
-        schema: {
-          fields: @fields.to_a,
-        }
-      }, {})
-    rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
-      # api_error? -> client cache clear
-      @cached_client = nil
-
-      message = e.message
-      if e.status_code == 409 && /Already Exists:/ =~ message
-        # ignore 'Already Exists' error
-        return
-      end
-      log.error "tables.insert API", :project_id => @project, :dataset => @dataset, :table => table_id, :code => e.status_code, :message => message
-      raise "failed to create table in bigquery" # TODO: error class
     end
 
     def replace_record_key(record)
@@ -422,30 +355,26 @@ module Fluent
         if Fluent::Engine.now - @last_fetch_schema_time > @schema_cache_expire
           table_id_format = @tablelist[0]
           table_id = generate_table_id(table_id_format, Time.at(Fluent::Engine.now))
-          res = client.get_table(@project, @dataset, table_id)
+          schema = writer.fetch_schema(@project, @dataset, table_id)
 
-          schema = res.schema.fields.as_json
-          log.debug "Load schema from BigQuery: #{@project}:#{@dataset}.#{table_id} #{schema}"
-          if allow_overwrite
-            fields = Fluent::BigQuery::RecordSchema.new("record")
-            fields.load_schema(schema, allow_overwrite)
-            @fields = fields
+          if schema
+            if allow_overwrite
+              fields = Fluent::BigQuery::RecordSchema.new("record")
+              fields.load_schema(schema, allow_overwrite)
+              @fields = fields
+            else
+              @fields.load_schema(schema, allow_overwrite)
+            end
           else
-            @fields.load_schema(schema, allow_overwrite)
+            if @fields.empty?
+              raise "failed to fetch schema from bigquery"
+            else
+              log.warn "Use previous schema"
+            end
           end
+
           @last_fetch_schema_time = Fluent::Engine.now
         end
-      end
-    rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
-      # api_error? -> client cache clear
-      @cached_client = nil
-      message = e.message
-      log.error "tables.get API", project_id: @project, dataset: @dataset, table: table_id, code: e.status_code, message: message
-      if @fields.empty?
-        raise "failed to fetch schema from bigquery" # TODO: error class
-      else
-        log.warn "Use previous schema"
-        @last_fetch_schema_time = Fluent::Engine.now
       end
     end
 
@@ -491,29 +420,16 @@ module Fluent
       end
 
       def insert(table_id, rows, template_suffix)
-        body = {
-          rows: rows,
-          skip_invalid_rows: @skip_invalid_rows,
-          ignore_unknown_values: @ignore_unknown_values,
-        }
-        body.merge!(template_suffix: template_suffix) if template_suffix
-        client.insert_all_table_data(@project, @dataset, table_id, body, {
-          options: {timeout_sec: @request_timeout_sec, open_timeout_sec: @request_open_timeout_sec}
-        })
-      rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
-        # api_error? -> client cache clear
-        @cached_client = nil
-
+        writer.insert_rows(@project, @dataset, table_id, rows, skip_invalid_rows: @skip_invalid_rows, ignore_unknown_values: @ignore_unknown_values, template_suffix: template_suffix)
+      rescue Fluent::BigQuery::Writer::Error => e
         if @auto_create_table && e.status_code == 404 && /Not Found: Table/i =~ e.message
           # Table Not Found: Auto Create Table
-          create_table(table_id)
+          writer.create_table(@project, @dataset, table_id, @fields)
           raise "table created. send rows next time."
         end
 
-        reason = e.respond_to?(:reason) ? e.reason : nil
-        log.error "tabledata.insertAll API", project_id: @project, dataset: @dataset, table: table_id, code: e.status_code, message: e.message, reason: reason
-        if RETRYABLE_ERROR_REASON.include?(reason)
-          raise "failed to insert into bigquery, retry" # TODO: error class
+        if e.retryable?
+          raise e # TODO: error class
         elsif @secondary
           flush_secondary(@secondary)
         end
@@ -545,109 +461,28 @@ module Fluent
 
       def load(chunk, table_id, template_suffix)
         res = nil
-        job_id = nil
-        create_upload_source(chunk) do |upload_source|
-          configuration, job_id = load_configuration(table_id, template_suffix, chunk)
-          res = client.insert_job(
-            @project,
-            configuration,
-            {
-              upload_source: upload_source,
-              content_type: "application/octet-stream",
-              options: {
-                timeout_sec: @request_timeout_sec,
-                open_timeout_sec: @request_open_timeout_sec,
-              }
-            }
-          )
+
+        if @prevent_duplicate_load
+          job_id = create_job_id(chunk, @dataset, "#{table_id}#{template_suffix}", @fields.to_a, @max_bad_records, @ignore_unknown_values)
+        else
+          job_id = nil
         end
-        wait_load(res.job_reference.job_id, table_id)
-      rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
-        # api_error? -> client cache clear
-        @cached_client = nil
 
-        reason = e.respond_to?(:reason) ? e.reason : nil
-        log.error "job.load API", project_id: @project, dataset: @dataset, table: table_id, code: e.status_code, message: e.message, reason: reason
-
-        return wait_load(job_id, table_id) if job_id && e.status_code == 409 && e.message =~ /Job/ # duplicate load job
-
-        if RETRYABLE_ERROR_REASON.include?(reason) || e.is_a?(Google::Apis::ServerError)
-          raise "failed to insert into bigquery, retry" # TODO: error class
+        create_upload_source(chunk) do |upload_source|
+          res = writer.create_load_job(@project, @dataset, table_id, upload_source, job_id, @fields, {
+            ignore_unknown_values: @ignore_unknown_values, max_bad_records: @max_bad_records, template_suffix: template_suffix,
+            timeout_sec: @request_timeout_sec,  open_timeout_sec: @request_open_timeout_sec,
+          })
+        end
+      rescue Fluent::BigQuery::Writer::Error => e
+        if e.retryable?
+          raise e
         elsif @secondary
           flush_secondary(@secondary)
         end
       end
 
       private
-
-      def load_configuration(table_id, template_suffix, chunk)
-        job_id = nil
-        if @prevent_duplicate_load
-          job_id = create_job_id(chunk, @dataset, "#{table_id}#{template_suffix}", @fields.to_a, @max_bad_records, @ignore_unknown_values)
-        end
-
-        configuration = {
-          configuration: {
-            load: {
-              destination_table: {
-                project_id: @project,
-                dataset_id: @dataset,
-                table_id: "#{table_id}#{template_suffix}",
-              },
-              schema: {
-                fields: @fields.to_a,
-              },
-              write_disposition: "WRITE_APPEND",
-              source_format: "NEWLINE_DELIMITED_JSON",
-              ignore_unknown_values: @ignore_unknown_values,
-              max_bad_records: @max_bad_records,
-            }
-          }
-        }
-        configuration.merge!({job_reference: {project_id: @project, job_id: job_id}}) if job_id
-
-        # If target table is already exist, omit schema configuration.
-        # Because schema changing is easier.
-        begin
-          if template_suffix && client.get_table(@project, @dataset, "#{table_id}#{template_suffix}")
-            configuration[:configuration][:load].delete(:schema)
-          end
-        rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError
-          raise "Schema is empty" if @fields.empty?
-        end
-
-        return configuration, job_id
-      end
-
-      def wait_load(job_id, table_id)
-        wait_interval = 10
-        _response = client.get_job(@project, job_id)
-
-        until _response.status.state == "DONE"
-          log.debug "wait for load job finish", state: _response.status.state, job_id: _response.job_reference.job_id
-          sleep wait_interval
-          _response = client.get_job(@project, _response.job_reference.job_id)
-        end
-
-        errors = _response.status.errors
-        if errors
-          errors.each do |e|
-            log.error "job.insert API (rows)", job_id: job_id, project_id: @project, dataset: @dataset, table: table_id, message: e.message, reason: e.reason
-          end
-        end
-
-        error_result = _response.status.error_result
-        if error_result
-          log.error "job.insert API (result)", job_id: job_id, project_id: @project, dataset: @dataset, table: table_id, message: error_result.message, reason: error_result.reason
-          if RETRYABLE_ERROR_REASON.include?(error_result.reason)
-            raise "failed to load into bigquery"
-          elsif @secondary
-            flush_secondary(@secondary)
-          end
-        end
-
-        log.debug "finish load job", state: _response.status.state
-      end
 
       def create_upload_source(chunk)
         chunk_is_file = @buffer_type == 'file'
