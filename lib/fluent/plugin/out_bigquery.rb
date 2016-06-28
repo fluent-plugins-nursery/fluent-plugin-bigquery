@@ -43,15 +43,6 @@ module Fluent
       conf["buffer_queue_limit"] = 32            unless conf["buffer_queue_limit"]
     end
 
-    ### for loads
-    ### TODO: different default values for buffering between 'load' and insert
-    # config_set_default :flush_interval, 1800 # 30min => 48 imports/day
-    # config_set_default :buffer_chunk_limit, 1000**4 # 1.0*10^12 < 1TB (1024^4)
-
-    ### OAuth credential
-    # config_param :client_id, :string
-    # config_param :client_secret, :string
-
     # Available methods are:
     # * private_key -- Use service account credential from pkcs12 private key file
     # * compute_engine -- Use access token available in instances of ComputeEngine
@@ -128,16 +119,8 @@ module Fluent
 
     config_param :method, :string, default: 'insert' # or 'load'
 
-    config_param :load_size_limit, :integer, default: 1000**4 # < 1TB (1024^4) # TODO: not implemented now
-    ### method: 'load'
-    #   https://developers.google.com/bigquery/loading-data-into-bigquery
-    # Maximum File Sizes:
-    # File Type   Compressed   Uncompressed
-    # CSV         1 GB         With new-lines in strings: 4 GB
-    #                          Without new-lines in strings: 1 TB
-    # JSON        1 GB         1 TB
-
-    config_param :row_size_limit, :integer, default: 100*1000 # < 100KB # configurable in google ?
+    # TODO
+    # config_param :row_size_limit, :integer, default: 100*1000 # < 100KB # configurable in google ?
     # config_param :insert_size_limit, :integer, default: 1000**2 # < 1MB
     # config_param :rows_per_second_limit, :integer, default: 1000 # spike limit
     ### method: ''Streaming data inserts support
