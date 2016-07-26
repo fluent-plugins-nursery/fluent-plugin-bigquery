@@ -120,10 +120,11 @@ module Fluent
           ignore_unknown_values: ignore_unknown_values,
         }
         body.merge!(template_suffix: template_suffix) if template_suffix
-        client.insert_all_table_data(project, dataset, table_id, body, {
+        res = client.insert_all_table_data(project, dataset, table_id, body, {
           options: {timeout_sec: timeout_sec, open_timeout_sec: open_timeout_sec}
         })
         log.debug "insert rows", project_id: project, dataset: dataset, table: table_id, count: rows.size
+        log.warn "insert errors", insert_errors: res.insert_errors if res.insert_errors && !res.insert_errors.empty?
       rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
         @client = nil
 
