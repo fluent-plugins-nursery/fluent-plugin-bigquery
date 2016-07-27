@@ -33,7 +33,7 @@ module Fluent
             format_one(value)
           end
         when :repeated
-          value.nil? ? [] : value.map {|v| format_one(v) }
+          value.nil? ? [] : value.each_with_object([]) { |v, arr| arr << format_one(v) if v }
         end
       end
 
