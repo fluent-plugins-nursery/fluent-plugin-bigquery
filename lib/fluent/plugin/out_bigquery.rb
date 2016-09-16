@@ -46,7 +46,7 @@ module Fluent
     # Available methods are:
     # * private_key -- Use service account credential from pkcs12 private key file
     # * compute_engine -- Use access token available in instances of ComputeEngine
-    # * private_json_key -- Use service account credential from JSON key
+    # * json_key -- Use service account credential from JSON key
     # * application_default -- Use application default credential
     config_param :auth_method, :string, default: 'private_key'
 
