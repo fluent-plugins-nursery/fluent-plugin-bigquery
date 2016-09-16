@@ -352,7 +352,7 @@ module Fluent
             if @fields.empty?
               raise "failed to fetch schema from bigquery"
             else
-              log.warn "Use previous schema"
+              log.warn "#{table_id} uses previous schema"
             end
           end
 
