@@ -48,7 +48,7 @@ module Fluent
     # * compute_engine -- Use access token available in instances of ComputeEngine
     # * json_key -- Use service account credential from JSON key
     # * application_default -- Use application default credential
-    config_param :auth_method, :string, default: 'private_key'
+    config_param :auth_method, :enum, list: [:private_key, :compute_engine, :json_key, :application_default], default: :private_key
 
     ### Service Account credential
     config_param :email, :string, default: nil
@@ -68,7 +68,7 @@ module Fluent
     # table_id
     #   In Table ID, enter a name for your new table. Naming rules are the same as for your dataset.
     config_param :table, :string, default: nil
-    config_param :tables, :string, default: nil
+    config_param :tables, :string, default: nil # TODO: use :array with value_type: :string
     config_param :template_suffix, :string, default: nil
 
     config_param :auto_create_table, :bool, default: false
@@ -117,7 +117,7 @@ module Fluent
     # prevent_duplicate_load (only load)
     config_param :prevent_duplicate_load, :bool, default: false
 
-    config_param :method, :string, default: 'insert' # or 'load'
+    config_param :method, :enum, list: [:insert, :load], default: :insert, skip_accessor: true
 
     # TODO
     # config_param :row_size_limit, :integer, default: 100*1000 # < 100KB # configurable in google ?
@@ -175,26 +175,27 @@ module Fluent
       end
       super
 
-      if @method == "insert"
+      case @method
+      when :insert
         extend(InsertImplementation)
-      elsif @method == "load"
+      when :load
         extend(LoadImplementation)
       else
         raise Fluent::ConfigError "'method' must be 'insert' or 'load'"
       end
 
       case @auth_method
-      when 'private_key'
+      when :private_key
         unless @email && @private_key_path
           raise Fluent::ConfigError, "'email' and 'private_key_path' must be specified if auth_method == 'private_key'"
         end
-      when 'compute_engine'
+      when :compute_engine
         # Do nothing
-      when 'json_key'
+      when :json_key
         unless @json_key
           raise Fluent::ConfigError, "'json_key' must be specified if auth_method == 'json_key'"
         end
-      when 'application_default'
+      when :application_default
         # Do nothing
       else
         raise Fluent::ConfigError, "unrecognized 'auth_method': #{@auth_method}"

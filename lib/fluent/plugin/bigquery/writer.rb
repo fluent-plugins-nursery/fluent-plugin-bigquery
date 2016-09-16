@@ -235,13 +235,13 @@ module Fluent
 
       def get_auth
         case @auth_method
-        when 'private_key'
+        when :private_key
           get_auth_from_private_key
-        when 'compute_engine'
+        when :compute_engine
           get_auth_from_compute_engine
-        when 'json_key'
+        when :json_key
           get_auth_from_json_key
-        when 'application_default'
+        when :application_default
           get_auth_from_application_default
         else
           raise ConfigError, "Unknown auth method: #{@auth_method}"
