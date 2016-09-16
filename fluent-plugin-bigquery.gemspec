@@ -31,6 +31,4 @@ Gem::Specification.new do |spec|
   spec.add_runtime_dependency "fluent-mixin-plaintextformatter", '>= 0.2.1'
   spec.add_runtime_dependency "fluent-mixin-config-placeholders", ">= 0.3.0"
   spec.add_runtime_dependency "fluent-plugin-buffer-lightening", ">= 0.0.2"
-
-  spec.add_development_dependency "fluent-plugin-dummydata-producer"
 end
