@@ -121,6 +121,29 @@ class BigQueryOutputTest < Test::Unit::TestCase
     assert driver.instance.writer.client.is_a?(Google::Apis::BigqueryV2::BigqueryService)
   end
 
+  def test_configure_auth_json_key_as_file_raise_permission_error
+    json_key_path = 'test/plugin/testdata/json_key.json'
+    json_key_path_dir = File.dirname(json_key_path)
+
+    begin
+      File.chmod(0000, json_key_path_dir)
+
+      driver = create_driver(%[
+        table foo
+        auth_method json_key
+        json_key #{json_key_path}
+        project yourproject_id
+        dataset yourdataset_id
+        field_integer time,status,bytes
+      ])
+      assert_raises(Errno::EACCES) do
+        driver.instance.writer.client
+      end
+    ensure
+      File.chmod(0755, json_key_path_dir)
+    end
+  end
+
   def test_configure_auth_json_key_as_string
     json_key = '{"private_key": "X", "client_email": "xxx@developer.gserviceaccount.com"}'
     json_key_io = StringIO.new(json_key)
