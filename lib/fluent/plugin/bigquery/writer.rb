@@ -188,7 +188,7 @@ module Fluent
         reason = e.respond_to?(:reason) ? e.reason : nil
         log.error "job.load API", project_id: project, dataset: dataset, table: table_id, code: e.status_code, message: e.message, reason: reason
 
-        return wait_load_job(project, dataset, job_id, table_id) if job_id && e.status_code == 409 && e.message =~ /Job/ # duplicate load job
+        return wait_load_job(project, dataset, job_id, table_id, retryable: false) if job_id && e.status_code == 409 && e.message =~ /Job/ # duplicate load job
 
         if RETRYABLE_ERROR_REASON.include?(reason) || e.is_a?(Google::Apis::ServerError)
           raise RetryableError.new(nil, e)
@@ -197,7 +197,7 @@ module Fluent
         end
       end
 
-      def wait_load_job(project, dataset, job_id, table_id)
+      def wait_load_job(project, dataset, job_id, table_id, retryable: true)
         wait_interval = 10
         _response = client.get_job(project, job_id)
 
@@ -217,7 +217,7 @@ module Fluent
         error_result = _response.status.error_result
         if error_result
           log.error "job.insert API (result)", job_id: job_id, project_id: project, dataset: dataset, table: table_id, message: error_result.message, reason: error_result.reason
-          if RETRYABLE_ERROR_REASON.include?(error_result.reason)
+          if retryable && RETRYABLE_ERROR_REASON.include?(error_result.reason)
             raise RetryableError.new("failed to load into bigquery, retry")
           else
             raise UnRetryableError.new("failed to load into bigquery, and cannot retry")
