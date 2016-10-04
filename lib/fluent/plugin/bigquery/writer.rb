@@ -271,11 +271,11 @@ module Fluent
       def get_auth_from_json_key
         json_key = @auth_options[:json_key]
 
-        if File.exist?(json_key)
+        begin
           File.open(json_key) do |f|
             Google::Auth::ServiceAccountCredentials.make_creds(json_key_io: f, scope: @scope)
           end
-        else
+        rescue Errno::ENOENT
           key = StringIO.new(json_key)
           Google::Auth::ServiceAccountCredentials.make_creds(json_key_io: key, scope: @scope)
         end
