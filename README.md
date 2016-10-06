@@ -42,6 +42,7 @@ OAuth flow for installed applications.
 | ignore_unknown_values                  | bool          | no                          | false                                                  | Accept rows that contain values that do not match the schema. The unknown values are ignored.                        |
 | schema_path                            | string        | yes (either `fetch_schema`) | nil                                                    | Schema Definition file path. It is formatted by JSON.                                                                |
 | fetch_schema                           | bool          | yes (either `schema_path`)  | false                                                  | If true, fetch table schema definition from Bigquery table automatically.                                            |
+| fetch_schema_table                     | string        | no                          | nil                                                    | If set, fetch table schema definition from this table, If fetch_schema is false, this param is ignored               |
 | schema_cache_expire                    | integer       | no                          | 600                                                    | Value is second. If current time is after expiration interval, re-fetch table schema definition.                     |
 | field_string                           | string        | no                          | nil                                                    | see examples.                                                                                                        |
 | field_integer                          | string        | no                          | nil                                                    | see examples.                                                                                                        |
@@ -355,6 +356,24 @@ For example value of `subdomain` attribute is `"bq.fluent"`, table id will be li
 - any type of attribute is allowed because stringified value will be used as replacement.
 - acceptable characters are alphabets, digits and `_`. All other characters will be removed.
 
+### Date partitioned table support
+this plugin can insert (load) into date partitioned table.
+
+Use `%{time_slice}`.
+
+```apache
+<match dummy>
+  @type bigquery
+
+  ...
+  time_slice_format %Y%m%d
+  table   accesslog$%{time_slice}
+  ...
+</match>
+```
+
+But, Dynamic table creating doesn't support date partitioned table yet.
+
 ### Dynamic table creating
 
 When `auto_create_table` is set to `true`, try to create the table using BigQuery API when insertion failed with code=404 "Not Found: Table ...".
@@ -452,6 +471,7 @@ The third method is to set `fetch_schema` to `true` to enable fetch a schema usi
   time_field  time
   
   fetch_schema true
+  # fetch_schema_table other_table # if you want to fetch schema from other table
   field_integer time
 </match>
 ```
