@@ -69,6 +69,9 @@ module Fluent
     #   In Table ID, enter a name for your new table. Naming rules are the same as for your dataset.
     config_param :table, :string, default: nil
     config_param :tables, :string, default: nil # TODO: use :array with value_type: :string
+
+    # template_suffix (only insert)
+    #   https://cloud.google.com/bigquery/streaming-data-into-bigquery#template_table_details
     config_param :template_suffix, :string, default: nil
 
     config_param :auto_create_table, :bool, default: false
@@ -89,6 +92,7 @@ module Fluent
 
     config_param :schema_path, :string, default: nil
     config_param :fetch_schema, :bool, default: false
+    config_param :fetch_schema_table, :string, default: nil
     config_param :schema_cache_expire, :time, default: 600
     config_param :field_string,  :string, default: nil
     config_param :field_integer, :string, default: nil
@@ -179,6 +183,7 @@ module Fluent
       when :insert
         extend(InsertImplementation)
       when :load
+        raise Fluent::ConfigError, "'template_suffix' is for only `insert` mode, instead use 'fetch_schema_table' and formatted table name" if @template_suffix
         extend(LoadImplementation)
       else
         raise Fluent::ConfigError "'method' must be 'insert' or 'load'"
@@ -337,7 +342,7 @@ module Fluent
       table_id = nil
       @fetch_schema_mutex.synchronize do
         if Fluent::Engine.now - @last_fetch_schema_time > @schema_cache_expire
-          table_id_format = @tablelist[0]
+          table_id_format = @fetch_schema_table || @tablelist[0]
           table_id = generate_table_id(table_id_format, Time.at(Fluent::Engine.now))
           schema = writer.fetch_schema(@project, @dataset, table_id)
 
@@ -422,7 +427,7 @@ module Fluent
 
     module LoadImplementation
       def format(tag, time, record)
-        fetch_schema if @template_suffix
+        fetch_schema if @fetch_schema_table
 
         if @replace_record_key
           record = replace_record_key(record)
@@ -436,25 +441,24 @@ module Fluent
         buf
       end
 
-      def _write(chunk, table_id_format, template_suffix_format)
+      def _write(chunk, table_id_format, _)
         now = Time.at(Fluent::Engine.now)
         table_id = generate_table_id(table_id_format, now, nil, chunk)
-        template_suffix = template_suffix_format ? generate_table_id(template_suffix_format, now, nil, chunk) : nil
-        load(chunk, table_id, template_suffix)
+        load(chunk, table_id)
       end
 
-      def load(chunk, table_id, template_suffix)
+      def load(chunk, table_id)
         res = nil
 
         if @prevent_duplicate_load
-          job_id = create_job_id(chunk, @dataset, "#{table_id}#{template_suffix}", @fields.to_a, @max_bad_records, @ignore_unknown_values)
+          job_id = create_job_id(chunk, @dataset, table_id, @fields.to_a, @max_bad_records, @ignore_unknown_values)
         else
           job_id = nil
         end
 
         create_upload_source(chunk) do |upload_source|
           res = writer.create_load_job(@project, @dataset, table_id, upload_source, job_id, @fields, {
-            ignore_unknown_values: @ignore_unknown_values, max_bad_records: @max_bad_records, template_suffix: template_suffix,
+            ignore_unknown_values: @ignore_unknown_values, max_bad_records: @max_bad_records,
             timeout_sec: @request_timeout_sec,  open_timeout_sec: @request_open_timeout_sec,
           })
         end
