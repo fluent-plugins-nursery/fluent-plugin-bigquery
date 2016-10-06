@@ -138,14 +138,14 @@ module Fluent
         end
       end
 
-      def create_load_job(project, dataset, table_id, upload_source, job_id, fields, ignore_unknown_values: false, max_bad_records: 0, template_suffix: nil, timeout_sec: nil, open_timeout_sec: 60)
+      def create_load_job(project, dataset, table_id, upload_source, job_id, fields, ignore_unknown_values: false, max_bad_records: 0, timeout_sec: nil, open_timeout_sec: 60)
         configuration = {
           configuration: {
             load: {
               destination_table: {
                 project_id: project,
                 dataset_id: dataset,
-                table_id: "#{table_id}#{template_suffix}",
+                table_id: table_id,
               },
               schema: {
                 fields: fields.to_a,
@@ -162,7 +162,7 @@ module Fluent
         # If target table is already exist, omit schema configuration.
         # Because schema changing is easier.
         begin
-          if template_suffix && client.get_table(project, dataset, "#{table_id}#{template_suffix}")
+          if client.get_table(project, dataset, table_id)
             configuration[:configuration][:load].delete(:schema)
           end
         rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError
