@@ -17,6 +17,8 @@ module Fluent
     class BigQueryOutput < Output
       Fluent::Plugin.register_output('bigquery', self)
 
+      helpers :event_emitter
+
       # https://developers.google.com/bigquery/browser-tool-quickstart
       # https://developers.google.com/bigquery/bigquery-api-quickstart
 
@@ -24,21 +26,28 @@ module Fluent
       def configure_for_insert(conf)
         raise ConfigError unless conf["method"] != "load"
 
-        conf["buffer_type"]                = "lightening"  unless conf["buffer_type"]
-        conf["flush_interval"]             = 0.25          unless conf["flush_interval"]
-        conf["try_flush_interval"]         = 0.05          unless conf["try_flush_interval"]
-        conf["buffer_chunk_limit"]         = 1 * 1024 ** 2 unless conf["buffer_chunk_limit"] # 1MB
-        conf["buffer_queue_limit"]         = 1024          unless conf["buffer_queue_limit"]
-        conf["buffer_chunk_records_limit"] = 500           unless conf["buffer_chunk_records_limit"]
+        buffer_config = conf.elements("buffer")[0]
+        return unless buffer_config
+        buffer_config["@type"]                       = "memory"      unless buffer_config["@type"]
+        buffer_config["flush_mode"]                  = :interval     unless buffer_config["flush_mode"]
+        buffer_config["flush_interval"]              = 0.25          unless buffer_config["flush_interval"]
+        buffer_config["flush_thread_interval"]       = 0.05          unless buffer_config["flush_thread_interval"]
+        buffer_config["flush_thread_burst_interval"] = 0.05          unless buffer_config["flush_thread_burst_interval"]
+        buffer_config["chunk_limit_size"]            = 1 * 1024 ** 2 unless buffer_config["chunk_limit_size"] # 1MB
+        buffer_config["queue_length_limit"]          = 1024          unless buffer_config["queue_length_limit"]
+        buffer_config["chunk_records_limit"]         = 500           unless buffer_config["chunk_records_limit"]
       end
 
       ### default for loads
       def configure_for_load(conf)
         raise ConfigError unless conf["method"] == "load"
 
-        # buffer_type, flush_interval, try_flush_interval is TimeSlicedOutput default
-        conf["buffer_chunk_limit"] = 1 * 1024 ** 3 unless conf["buffer_chunk_limit"] # 1GB
-        conf["buffer_queue_limit"] = 32            unless conf["buffer_queue_limit"]
+        buffer_config = conf.elements("buffer")
+        return unless buffer_config
+        buffer_config["@type"]                       = "file"        unless buffer_config["@type"]
+        buffer_config["flush_mode"]                  = :interval     unless buffer_config["flush_mode"]
+        buffer_config["chunk_limit_size"]            = 1 * 1024 ** 3 unless buffer_config["chunk_limit_size"] # 1GB
+        buffer_config["queue_length_limit"]          = 32            unless buffer_config["queue_length_limit"]
       end
 
       # Available methods are:
@@ -281,33 +290,6 @@ module Fluent
         })
       end
 
-      def generate_table_id(table_id_format, current_time, row = nil, chunk = nil)
-        format, col = table_id_format.split(/@/)
-        time = if col && row
-                 keys = col.split('.')
-                 t = keys.inject(row[:json]) {|obj, attr| obj[attr.to_sym] }
-                 Time.at(t)
-               else
-                 current_time
-               end
-        if row && format =~ /\$\{/
-          format.gsub!(/\$\{\s*(\w+)\s*\}/) do |m|
-            row[:json][$1.to_sym].to_s.gsub(/[^\w]/, '')
-          end
-        end
-        table_id = time.strftime(format)
-
-        if chunk
-          table_id.gsub(%r(%{time_slice})) { |expr|
-            chunk.key
-          }
-        else
-          table_id.gsub(%r(%{time_slice})) { |expr|
-            current_time.strftime(@time_slice_format)
-          }
-        end
-      end
-
       def replace_record_key(record)
         new_record = {}
         record.each do |key, _|
@@ -330,6 +312,21 @@ module Fluent
         record
       end
 
+      def format(tag, time, record)
+        fetch_schema if @fetch_schema_table
+
+        if @replace_record_key
+          record = replace_record_key(record)
+        end
+
+        buf = String.new
+        row = @fields.format(@add_time_field.call(record, time))
+        unless row.empty?
+          buf << MultiJson.dump(row) + "\n"
+        end
+        buf
+      end
+
       def write(chunk)
         table_id_format = @tables_mutex.synchronize do
           t = @tables_queue.shift
@@ -344,8 +341,7 @@ module Fluent
         table_id = nil
         @fetch_schema_mutex.synchronize do
           if Fluent::Engine.now - @last_fetch_schema_time > @schema_cache_expire
-            table_id_format = @fetch_schema_table || @tablelist[0]
-            table_id = generate_table_id(table_id_format, Time.at(Fluent::Engine.now))
+            table_id = @fetch_schema_table || @tablelist[0]
             schema = writer.fetch_schema(@project, @dataset, table_id)
 
             if schema
@@ -370,39 +366,20 @@ module Fluent
       end
 
       module InsertImplementation
-        def format(tag, time, record)
-          fetch_schema if @template_suffix
-
-          if @replace_record_key
-            record = replace_record_key(record)
-          end
-
-          if @convert_hash_to_json
-            record = convert_hash_to_json(record)
-          end
-
-          buf = String.new
-          row = @fields.format(@add_time_field.call(record, time))
-          unless row.empty?
-            row = {"json" => row}
-            row['insert_id'] = @get_insert_id.call(record) if @get_insert_id
-            buf << row.to_msgpack
-          end
-          buf
-        end
-
         def _write(chunk, table_format, template_suffix_format)
-          rows = []
-          chunk.msgpack_each do |row_object|
-            # TODO: row size limit
-            rows << row_object.deep_symbolize_keys
+          rows = chunk.open do |io|
+            io.map do |line|
+              record = MultiJson.load(line)
+              row = {"json" => record}
+              row["insert_id"] = @get_insert_id.call(record) if @get_insert_id
+              row.deep_symbolize_keys
+            end
           end
 
-          now = Time.at(Fluent::Engine.now)
           group = rows.group_by do |row|
             [
-              generate_table_id(table_format, now, row, chunk),
-              template_suffix_format ? generate_table_id(template_suffix_format, now, row, chunk) : nil,
+              extract_placeholders(table_format, chunk.metadata),
+              template_suffix_format ? extract_placeholders(template_suffix_format, chunk.metadata) : nil,
             ]
           end
           group.each do |(table_id, template_suffix), group_rows|
@@ -420,32 +397,32 @@ module Fluent
           end
 
           if e.retryable?
-            raise e # TODO: error class
+            raise e
           elsif @secondary
-            flush_secondary(@secondary)
+            # TODO: find better way
+            @retry = retry_state_create(
+              :output_retries, @buffer_config.retry_type, @buffer_config.retry_wait, @buffer_config.retry_timeout,
+              forever: false, max_steps: @buffer_config.retry_max_times, backoff_base: @buffer_config.retry_exponential_backoff_base,
+              max_interval: @buffer_config.retry_max_interval,
+              secondary: true, secondary_threshold: 0.00000000001,
+              randomize: @buffer_config.retry_randomize
+            )
+            raise e
+          else
+            @retry = retry_state_create(
+              :output_retries, @buffer_config.retry_type, @buffer_config.retry_wait, @buffer_config.retry_timeout,
+              forever: false, max_steps: 0, backoff_base: @buffer_config.retry_exponential_backoff_base,
+              max_interval: @buffer_config.retry_max_interval,
+              randomize: @buffer_config.retry_randomize
+            )
+            raise e
           end
         end
       end
 
       module LoadImplementation
-        def format(tag, time, record)
-          fetch_schema if @fetch_schema_table
-
-          if @replace_record_key
-            record = replace_record_key(record)
-          end
-
-          buf = String.new
-          row = @fields.format(@add_time_field.call(record, time))
-          unless row.empty?
-            buf << MultiJson.dump(row) + "\n"
-          end
-          buf
-        end
-
         def _write(chunk, table_id_format, _)
-          now = Time.at(Fluent::Engine.now)
-          table_id = generate_table_id(table_id_format, now, nil, chunk)
+          table_id = extract_placeholders(table_id_format, chunk)
           load(chunk, table_id)
         end
 
