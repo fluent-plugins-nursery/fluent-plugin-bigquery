@@ -1,11 +1,4 @@
 require 'helper'
-require 'google/apis/bigquery_v2'
-require 'google/api_client/auth/key_utils'
-require 'googleauth'
-require 'active_support/json'
-require 'active_support/core_ext/hash'
-require 'active_support/core_ext/object/json'
-
 
 class BigQueryOutputTest < Test::Unit::TestCase
   def setup
@@ -31,7 +24,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
   API_SCOPE = "https://www.googleapis.com/auth/bigquery"
 
   def create_driver(conf = CONFIG)
-    Fluent::Test::TimeSlicedOutputTestDriver.new(Fluent::BigQueryOutput).configure(conf)
+    Fluent::Test::Driver::Output.new(Fluent::Plugin::BigQueryOutput).configure(conf)
   end
 
   def stub_writer(driver)
@@ -146,8 +139,9 @@ class BigQueryOutputTest < Test::Unit::TestCase
 
   def test_configure_auth_json_key_as_string
     json_key = '{"private_key": "X", "client_email": "' + 'x' * 255 + '@developer.gserviceaccount.com"}'
+    parsed_json_key = MultiJson.load(json_key)
     json_key_io = StringIO.new(json_key)
-    mock(StringIO).new(json_key) { json_key_io }
+    mock(StringIO).new(satisfy { |arg| MultiJson.load(arg) == parsed_json_key } ) { json_key_io }
     authorization = Object.new
     mock(Google::Auth::ServiceAccountCredentials).make_creds(json_key_io: json_key_io, scope: API_SCOPE) { authorization }
 
@@ -261,69 +255,64 @@ class BigQueryOutputTest < Test::Unit::TestCase
     end
   end
 
-  def test_format_stream
+  def test_format
     now = Time.now
-    input = [
-      now,
-      {
-        "status" => "1",
-        "bytes" => 3.0,
-        "vhost" => :bar,
-        "path" => "/path/to/baz",
-        "method" => "GET",
-        "protocol" => "HTTP/0.9",
-        "agent" => "libwww",
-        "referer" => "http://referer.example",
-        "requesttime" => (now - 1).to_f.to_s,
-        "bot_access" => true,
-        "loginsession" => false,
-        "something-else" => "would be ignored",
-        "yet-another" => {
-          "foo" => "bar",
-          "baz" => 1,
-        },
-        "remote" => {
-          "host" => "remote.example",
-          "ip" =>  "192.0.2.1",
-          "port" => 12345,
-          "user" => "tagomoris",
-        }
+    input = {
+      "status" => "1",
+      "bytes" => 3.0,
+      "vhost" => :bar,
+      "path" => "/path/to/baz",
+      "method" => "GET",
+      "protocol" => "HTTP/0.9",
+      "agent" => "libwww",
+      "referer" => "http://referer.example",
+      "requesttime" => (now - 1).to_f.to_s,
+      "bot_access" => true,
+      "loginsession" => false,
+      "something-else" => "would be ignored",
+      "yet-another" => {
+        "foo" => "bar",
+        "baz" => 1,
+      },
+      "remote" => {
+        "host" => "remote.example",
+        "ip" =>  "192.0.2.1",
+        "port" => 12345,
+        "user" => "tagomoris",
       }
-    ]
+    }
     expected = {
-      "json" => {
-        "time" => now.to_i,
-        "status" => 1,
-        "bytes" => 3,
-        "vhost" => "bar",
-        "path" => "/path/to/baz",
-        "method" => "GET",
-        "protocol" => "HTTP/0.9",
-        "agent" => "libwww",
-        "referer" => "http://referer.example",
-        "requesttime" => (now - 1).to_f.to_s.to_f,
-        "bot_access" => true,
-        "loginsession" => false,
-        "something-else" => "would be ignored",
-        "yet-another" => {
-          "foo" => "bar",
-          "baz" => 1,
-        },
-        "remote" => {
-          "host" => "remote.example",
-          "ip" =>  "192.0.2.1",
-          "port" => 12345,
-          "user" => "tagomoris",
-        }
+      "time" => now.to_i,
+      "status" => 1,
+      "bytes" => 3,
+      "vhost" => "bar",
+      "path" => "/path/to/baz",
+      "method" => "GET",
+      "protocol" => "HTTP/0.9",
+      "agent" => "libwww",
+      "referer" => "http://referer.example",
+      "requesttime" => (now - 1).to_f.to_s.to_f,
+      "bot_access" => true,
+      "loginsession" => false,
+      "something-else" => "would be ignored",
+      "yet-another" => {
+        "foo" => "bar",
+        "baz" => 1,
+      },
+      "remote" => {
+        "host" => "remote.example",
+        "ip" =>  "192.0.2.1",
+        "port" => 12345,
+        "user" => "tagomoris",
       }
     }
 
     driver = create_driver(CONFIG)
-    driver.instance.start
-    buf = driver.instance.format_stream("my.tag", [input])
-    driver.instance.shutdown
+    driver.instance_start
+    buf = driver.instance.format("my.tag", now, input)
+    driver.instance_shutdown
 
-    assert_equal expected, MessagePack.unpack(buf)
+    assert_equal expected, MultiJson.load(buf)
   end
 
   [
@@ -336,20 +325,15 @@ class BigQueryOutputTest < Test::Unit::TestCase
       }
     ],
     [
-      "%Y-%m-%dT%H:%M:%SZ", "field_string",
+      "%Y-%m-%dT%H:%M:%S%:z", "field_string",
       lambda{|t| t.iso8601 },
-      :assert_equal.to_proc
-    ],
-    [
-      "%a, %d %b %Y %H:%M:%S GMT", "field_string",
-      lambda{|t| t.httpdate },
       :assert_equal.to_proc
     ],
   ].each do |format, type, expect_time, assert|
     define_method("test_time_formats_#{format}") do
-      now = Time.now.utc
-      input = [ now, {} ]
-      expected = { "json" => { "time" => expect_time[now], } }
+      now = Fluent::Engine.now
+      input = {}
+      expected = { "time" => expect_time[Time.at(now.to_r)] }
 
       driver = create_driver(<<-CONFIG)
         table foo
@@ -363,33 +347,28 @@ class BigQueryOutputTest < Test::Unit::TestCase
         #{type}     time
       CONFIG
 
-      driver.instance.start
-      buf = driver.instance.format_stream("my.tag", [input])
-      driver.instance.shutdown
+      driver.instance_start
+      buf = driver.instance.format("my.tag", now, input)
+      driver.instance_shutdown
 
-      assert[self, expected["json"]["time"], MessagePack.unpack(buf)["json"]["time"]]
+      assert[self, expected["time"], MultiJson.load(buf)["time"]]
     end
   end
 
   def test_format_nested_time
     now = Time.now
-    input = [
-      now,
-      {
-        "metadata" => {
-          "node" => "mynode.example",
-        },
-        "log" => "something",
-      }
-    ]
+    input = {
+      "metadata" => {
+        "node" => "mynode.example",
+      },
+      "log" => "something",
+    }
     expected = {
-      "json" => {
-        "metadata" => {
-          "time" => now.strftime("%s").to_i,
-          "node" => "mynode.example",
-        },
-        "log" => "something",
-      }
+      "metadata" => {
+        "time" => now.strftime("%s").to_i,
+        "node" => "mynode.example",
+      },
+      "log" => "something",
     }
 
     driver = create_driver(<<-CONFIG)
@@ -406,76 +385,71 @@ class BigQueryOutputTest < Test::Unit::TestCase
       field_string  metadata.node,log
     CONFIG
 
-    driver.instance.start
-    buf = driver.instance.format_stream("my.tag", [input])
+    driver.instance_start
+    buf = driver.instance.format("my.tag", now, input)
     driver.instance.shutdown
 
-    assert_equal expected, MessagePack.unpack(buf)
+    assert_equal expected, MultiJson.load(buf)
   end
 
   def test_format_with_schema
     now = Time.now
-    input = [
-      now,
-      {
-        "request" => {
-          "vhost" => :bar,
-          "path" => "/path/to/baz",
-          "method" => "GET",
-          "protocol" => "HTTP/0.9",
-          "agent" => "libwww",
-          "referer" => "http://referer.example",
-          "time" => (now - 1).to_f,
-          "bot_access" => true,
-          "loginsession" => false,
-        },
-        "response" => {
-          "status" => "1",
-          "bytes" => 3.0,
-        },
-        "remote" => {
-          "host" => "remote.example",
-          "ip" =>  "192.0.2.1",
-          "port" => 12345,
-          "user" => "tagomoris",
-        },
-        "something-else" => "would be ignored",
-        "yet-another" => {
-          "foo" => "bar",
-          "baz" => 1,
-        },
-      }
-    ]
+    input = {
+      "request" => {
+        "vhost" => :bar,
+        "path" => "/path/to/baz",
+        "method" => "GET",
+        "protocol" => "HTTP/0.9",
+        "agent" => "libwww",
+        "referer" => "http://referer.example",
+        "time" => (now - 1).to_f,
+        "bot_access" => true,
+        "loginsession" => false,
+      },
+      "response" => {
+        "status" => "1",
+        "bytes" => 3.0,
+      },
+      "remote" => {
+        "host" => "remote.example",
+        "ip" =>  "192.0.2.1",
+        "port" => 12345,
+        "user" => "tagomoris",
+      },
+      "something-else" => "would be ignored",
+      "yet-another" => {
+        "foo" => "bar",
+        "baz" => 1,
+      },
+    }
     expected = {
-      "json" => {
-        "time" => now.to_i,
-        "request" => {
-          "vhost" => "bar",
-          "path" => "/path/to/baz",
-          "method" => "GET",
-          "protocol" => "HTTP/0.9",
-          "agent" => "libwww",
-          "referer" => "http://referer.example",
-          "time" => (now - 1).to_f,
-          "bot_access" => true,
-          "loginsession" => false,
-        },
-        "remote" => {
-          "host" => "remote.example",
-          "ip" =>  "192.0.2.1",
-          "port" => 12345,
-          "user" => "tagomoris",
-        },
-        "response" => {
-          "status" => 1,
-          "bytes" => 3,
-        },
-        "something-else" => "would be ignored",
-        "yet-another" => {
-          "foo" => "bar",
-          "baz" => 1,
-        },
-      }
+      "time" => now.to_i,
+      "request" => {
+        "vhost" => "bar",
+        "path" => "/path/to/baz",
+        "method" => "GET",
+        "protocol" => "HTTP/0.9",
+        "agent" => "libwww",
+        "referer" => "http://referer.example",
+        "time" => (now - 1).to_f,
+        "bot_access" => true,
+        "loginsession" => false,
+      },
+      "remote" => {
+        "host" => "remote.example",
+        "ip" =>  "192.0.2.1",
+        "port" => 12345,
+        "user" => "tagomoris",
+      },
+      "response" => {
+        "status" => 1,
+        "bytes" => 3,
+      },
+      "something-else" => "would be ignored",
+      "yet-another" => {
+        "foo" => "bar",
+        "baz" => 1,
+      },
     }
 
     driver = create_driver(<<-CONFIG)
@@ -491,31 +465,26 @@ class BigQueryOutputTest < Test::Unit::TestCase
       schema_path #{File.join(File.dirname(__FILE__), "testdata", "apache.schema")}
       field_integer time
     CONFIG
-    driver.instance.start
-    buf = driver.instance.format_stream("my.tag", [input])
-    driver.instance.shutdown
+    driver.instance_start
+    buf = driver.instance.format("my.tag", now, input)
+    driver.instance_shutdown
 
-    assert_equal expected, MessagePack.unpack(buf)
+    assert_equal expected, MultiJson.load(buf)
   end
 
   def test_format_repeated_field_with_schema
     now = Time.now
-    input = [
-      now,
-      {
-        "tty" => nil,
-        "pwd" => "/home/yugui",
-        "user" => "fluentd",
-        "argv" => %w[ tail -f /var/log/fluentd/fluentd.log ]
-      }
-    ]
+    input = {
+      "tty" => nil,
+      "pwd" => "/home/yugui",
+      "user" => "fluentd",
+      "argv" => %w[ tail -f /var/log/fluentd/fluentd.log ]
+    }
     expected = {
-      "json" => {
-        "time" => now.to_i,
-        "pwd" => "/home/yugui",
-        "user" => "fluentd",
-        "argv" => %w[ tail -f /var/log/fluentd/fluentd.log ]
-      }
+      "time" => now.to_i,
+      "pwd" => "/home/yugui",
+      "user" => "fluentd",
+      "argv" => %w[ tail -f /var/log/fluentd/fluentd.log ]
     }
 
     driver = create_driver(<<-CONFIG)
@@ -531,31 +500,26 @@ class BigQueryOutputTest < Test::Unit::TestCase
       schema_path #{File.join(File.dirname(__FILE__), "testdata", "sudo.schema")}
       field_integer time
     CONFIG
-    driver.instance.start
-    buf = driver.instance.format_stream("my.tag", [input])
-    driver.instance.shutdown
+    driver.instance_start
+    buf = driver.instance.format("my.tag", now, input)
+    driver.instance_shutdown
 
-    assert_equal expected, MessagePack.unpack(buf)
+    assert_equal expected, MultiJson.load(buf)
   end
 
   def test_format_fetch_from_bigquery_api
     now = Time.now
-    input = [
-      now,
-      {
-        "tty" => nil,
-        "pwd" => "/home/yugui",
-        "user" => "fluentd",
-        "argv" => %w[ tail -f /var/log/fluentd/fluentd.log ]
-      }
-    ]
+    input = {
+      "tty" => nil,
+      "pwd" => "/home/yugui",
+      "user" => "fluentd",
+      "argv" => %w[ tail -f /var/log/fluentd/fluentd.log ]
+    }
     expected = {
-      "json" => {
-        "time" => now.to_i,
-        "pwd" => "/home/yugui",
-        "user" => "fluentd",
-        "argv" => %w[ tail -f /var/log/fluentd/fluentd.log ]
-      }
+      "time" => now.to_i,
+      "pwd" => "/home/yugui",
+      "user" => "fluentd",
+      "argv" => %w[ tail -f /var/log/fluentd/fluentd.log ]
     }
 
     driver = create_driver(<<-CONFIG)
@@ -576,11 +540,11 @@ class BigQueryOutputTest < Test::Unit::TestCase
     mock(writer).fetch_schema('yourproject_id', 'yourdataset_id', 'foo') do
       sudo_schema_response.deep_stringify_keys["schema"]["fields"]
     end
-    driver.instance.start
-    buf = driver.instance.format_stream("my.tag", [input])
-    driver.instance.shutdown
+    driver.instance_start
+    buf = driver.instance.format("my.tag", now, input)
+    driver.instance_shutdown
 
-    assert_equal expected, MessagePack.unpack(buf)
+    assert_equal expected, MultiJson.load(buf)
 
     fields = driver.instance.instance_eval{ @fields }
     assert fields["time"]
@@ -604,24 +568,19 @@ class BigQueryOutputTest < Test::Unit::TestCase
     assert_equal :repeated, fields["argv"].mode
   end
 
-  def test_format_fetch_from_bigquery_api_with_generated_table_id
+  def test_format_fetch_from_bigquery_api_with_fetch_schema_table
     now = Time.now
-    input = [
-      now,
-      {
-        "tty" => nil,
-        "pwd" => "/home/yugui",
-        "user" => "fluentd",
-        "argv" => %w[ tail -f /var/log/fluentd/fluentd.log ]
-      }
-    ]
+    input = {
+      "tty" => nil,
+      "pwd" => "/home/yugui",
+      "user" => "fluentd",
+      "argv" => %w[ tail -f /var/log/fluentd/fluentd.log ]
+    }
     expected = {
-      "json" => {
-        "time" => now.to_i,
-        "pwd" => "/home/yugui",
-        "user" => "fluentd",
-        "argv" => %w[ tail -f /var/log/fluentd/fluentd.log ]
-      }
+      "time" => now.to_i,
+      "pwd" => "/home/yugui",
+      "user" => "fluentd",
+      "argv" => %w[ tail -f /var/log/fluentd/fluentd.log ]
     }
 
     driver = create_driver(<<-CONFIG)
@@ -635,18 +594,19 @@ class BigQueryOutputTest < Test::Unit::TestCase
       time_field  time
 
       fetch_schema true
+      fetch_schema_table foo
       field_integer time
     CONFIG
 
     writer = stub_writer(driver)
-    mock(writer).fetch_schema('yourproject_id', 'yourdataset_id', now.strftime('foo_%Y_%m_%d')) do
+    mock(writer).fetch_schema('yourproject_id', 'yourdataset_id', now.strftime('foo')) do
       sudo_schema_response.deep_stringify_keys["schema"]["fields"]
     end
-    driver.instance.start
-    buf = driver.instance.format_stream("my.tag", [input])
-    driver.instance.shutdown
+    driver.instance_start
+    buf = driver.instance.format("my.tag", now, input)
+    driver.instance_shutdown
 
-    assert_equal expected, MessagePack.unpack(buf)
+    assert_equal expected, MultiJson.load(buf)
 
     fields = driver.instance.instance_eval{ @fields }
     assert fields["time"]
@@ -670,18 +630,15 @@ class BigQueryOutputTest < Test::Unit::TestCase
     assert_equal :repeated, fields["argv"].mode
   end
 
-  def test_format_with_insert_id
-    now = Time.now
-    input = [
-      now,
-      {
-        "uuid" => "9ABFF756-0267-4247-847F-0895B65F0938",
-      }
-    ]
+  def test__write_with_insert_id
+    now = Time.now.to_i
+    input = {
+      "uuid" => "9ABFF756-0267-4247-847F-0895B65F0938",
+    }
     expected = {
-      "insert_id" => "9ABFF756-0267-4247-847F-0895B65F0938",
-      "json" => {
-        "uuid" => "9ABFF756-0267-4247-847F-0895B65F0938",
+      insert_id: "9ABFF756-0267-4247-847F-0895B65F0938",
+      json: {
+        uuid: "9ABFF756-0267-4247-847F-0895B65F0938",
       }
     }
 
@@ -695,28 +652,27 @@ class BigQueryOutputTest < Test::Unit::TestCase
       insert_id_field uuid
       field_string uuid
     CONFIG
-    driver.instance.start
-    buf = driver.instance.format_stream("my.tag", [input])
-    driver.instance.shutdown
-
-    assert_equal expected, MessagePack.unpack(buf)
+    mock(driver.instance).insert("foo", [expected], nil)
+    driver.instance_start
+    driver.run do
+      driver.feed('tag', now, input)
+      driver.flush
+    end
+    driver.instance_shutdown
   end
 
-  def test_format_with_nested_insert_id
-    now = Time.now
-    input = [
-      now,
-      {
-        "data" => {
-          "uuid" => "809F6BA7-1C16-44CD-9816-4B20E2C7AA2A",
-        },
-      }
-    ]
+  def test__write_with_nested_insert_id
+    now = Time.now.to_i
+    input = {
+      "data" => {
+        "uuid" => "809F6BA7-1C16-44CD-9816-4B20E2C7AA2A",
+      },
+    }
     expected = {
-      "insert_id" => "809F6BA7-1C16-44CD-9816-4B20E2C7AA2A",
-      "json" => {
-        "data" => {
-          "uuid" => "809F6BA7-1C16-44CD-9816-4B20E2C7AA2A",
+      insert_id: "809F6BA7-1C16-44CD-9816-4B20E2C7AA2A",
+      json: {
+        data: {
+          uuid: "809F6BA7-1C16-44CD-9816-4B20E2C7AA2A",
         }
       }
     }
@@ -731,63 +687,29 @@ class BigQueryOutputTest < Test::Unit::TestCase
       insert_id_field data.uuid
       field_string data.uuid
     CONFIG
-    driver.instance.start
-    buf = driver.instance.format_stream("my.tag", [input])
-    driver.instance.shutdown
-
-    assert_equal expected, MessagePack.unpack(buf)
-  end
-
-  def test_format_for_load
-    now = Time.now
-    input = [
-      now,
-      {
-        "uuid" => "9ABFF756-0267-4247-847F-0895B65F0938",
-      }
-    ]
-    expected = MultiJson.dump({
-      "uuid" => "9ABFF756-0267-4247-847F-0895B65F0938",
-    }) + "\n"
-
-    driver = create_driver(<<-CONFIG)
-      method load
-      table foo
-      email foo@bar.example
-      private_key_path /path/to/key
-      project yourproject_id
-      dataset yourdataset_id
-
-      field_string uuid
-
-      buffer_type memory
-    CONFIG
-    driver.instance.start
-    buf = driver.instance.format_stream("my.tag", [input])
-    driver.instance.shutdown
-
-    assert_equal expected, buf
+    mock(driver.instance).insert("foo", [expected], nil)
+    driver.instance_start
+    driver.run do
+      driver.feed('tag', now, input)
+      driver.flush
+    end
+    driver.instance_shutdown
   end
 
   def test_replace_record_key
     now = Time.now
-    input = [
-      now,
-      {
-        "vhost" => :bar,
-        "@referer" => "http://referer.example",
-        "bot_access" => true,
-        "login-session" => false
-      }
-    ]
+    input = {
+      "vhost" => :bar,
+      "@referer" => "http://referer.example",
+      "bot_access" => true,
+      "login-session" => false
+    }
     expected = {
-      "json" => {
-        "time" => now.to_i,
-        "vhost" => "bar",
-        "referer" => "http://referer.example",
-        "bot_access" => true,
-        "login_session" => false
-      }
+      "time" => now.to_i,
+      "vhost" => "bar",
+      "referer" => "http://referer.example",
+      "bot_access" => true,
+      "login_session" => false
     }
 
     driver = create_driver(<<-CONFIG)
@@ -808,38 +730,33 @@ class BigQueryOutputTest < Test::Unit::TestCase
       field_boolean bot_access, login_session
     CONFIG
     driver.instance.start
-    buf = driver.instance.format_stream("my.tag", [input])
+    buf = driver.instance.format("my.tag", now, input)
     driver.instance.shutdown
 
-    assert_equal expected, MessagePack.unpack(buf)
+    assert_equal expected, MultiJson.load(buf)
   end
 
   def test_convert_hash_to_json
     now = Time.now
-    input = [
-      now,
-      {
-        "vhost" => :bar,
-        "referer" => "http://referer.example",
-        "bot_access" => true,
-        "loginsession" => false,
-        "remote" => {
-          "host" => "remote.example",
-          "ip" => "192.0.2.1",
-          "port" => 12345,
-          "user" => "tagomoris",
-        }
+    input = {
+      "vhost" => :bar,
+      "referer" => "http://referer.example",
+      "bot_access" => true,
+      "loginsession" => false,
+      "remote" => {
+        "host" => "remote.example",
+        "ip" => "192.0.2.1",
+        "port" => 12345,
+        "user" => "tagomoris",
       }
-    ]
+    }
     expected = {
-      "json" => {
-        "time" => now.to_i,
-        "vhost" => "bar",
-        "referer" => "http://referer.example",
-        "bot_access" => true,
-        "loginsession" => false,
-        "remote" => "{\"host\":\"remote.example\",\"ip\":\"192.0.2.1\",\"port\":12345,\"user\":\"tagomoris\"}"
-      }
+      "time" => now.to_i,
+      "vhost" => "bar",
+      "referer" => "http://referer.example",
+      "bot_access" => true,
+      "loginsession" => false,
+      "remote" => "{\"host\":\"remote.example\",\"ip\":\"192.0.2.1\",\"port\":12345,\"user\":\"tagomoris\"}"
     }
 
     driver = create_driver(<<-CONFIG)
@@ -859,23 +776,23 @@ class BigQueryOutputTest < Test::Unit::TestCase
       field_boolean bot_access, loginsession
     CONFIG
     driver.instance.start
-    buf = driver.instance.format_stream("my.tag", [input])
+    buf = driver.instance.format("my.tag", now, input)
     driver.instance.shutdown
 
-    assert_equal expected, MessagePack.unpack(buf)
+    assert_equal expected, MultiJson.load(buf)
   end
 
   def test_write
-    entry = {json: {a: "b"}}, {json: {b: "c"}}
+    entry = {a: "b"}
     driver = create_driver
 
     writer = stub_writer(driver)
-    mock.proxy(writer).insert_rows('yourproject_id', 'yourdataset_id', 'foo', entry, hash_including(
+    mock.proxy(writer).insert_rows('yourproject_id', 'yourdataset_id', 'foo', [{json: hash_including(entry)}], hash_including(
       skip_invalid_rows: false,
       ignore_unknown_values: false
     ))
     mock(writer.client).insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo', {
-      rows: entry,
+      rows: [{json: hash_including(entry)}],
       skip_invalid_rows: false,
       ignore_unknown_values: false
     }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) do
@@ -884,18 +801,17 @@ class BigQueryOutputTest < Test::Unit::TestCase
       s
     end
 
-    chunk = Fluent::MemoryBufferChunk.new("my.tag")
-    entry.each do |e|
-      chunk << e.to_msgpack
+    driver.instance_start
+    tag, time, record = "tag", Time.now.to_i, {"a" => "b"}
+    metadata = driver.instance.metadata_for_test(tag, time, record)
+    chunk = driver.instance.buffer.generate_chunk(metadata).tap do |c|
+      c.append([driver.instance.format(tag, time, record)])
     end
-
-    driver.instance.start
     driver.instance.write(chunk)
-    driver.instance.shutdown
+    driver.instance_shutdown
   end
 
   def test_write_with_retryable_error
-    entry = {json: {a: "b"}}, {json: {b: "c"}}
     driver = create_driver(<<-CONFIG)
       table foo
       email foo@bar.example
@@ -917,9 +833,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
       </secondary>
     CONFIG
 
+    entry = {a: "b"}
     writer = stub_writer(driver)
     mock(writer.client).insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo', {
-      rows: entry,
+      rows: [{json: hash_including(entry)}],
       skip_invalid_rows: false,
       ignore_unknown_values: false
     }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) do
@@ -927,20 +844,19 @@ class BigQueryOutputTest < Test::Unit::TestCase
       raise ex
     end
 
-    chunk = Fluent::MemoryBufferChunk.new("my.tag")
-    entry.each do |e|
-      chunk << e.to_msgpack
+    driver.instance_start
+    tag, time, record = "tag", Time.now.to_i, {"a" => "b"}
+    metadata = driver.instance.metadata_for_test(tag, time, record)
+    chunk = driver.instance.buffer.generate_chunk(metadata).tap do |c|
+      c.append([driver.instance.format(tag, time, record)])
     end
-
-    driver.instance.start
     assert_raise Fluent::BigQuery::RetryableError do
       driver.instance.write(chunk)
     end
-    driver.instance.shutdown
+    driver.instance_shutdown
   end
 
   def test_write_with_not_retryable_error
-    entry = {json: {a: "b"}}, {json: {b: "c"}}
     driver = create_driver(<<-CONFIG)
       table foo
       email foo@bar.example
@@ -962,9 +878,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
       </secondary>
     CONFIG
 
+    entry = {a: "b"}
     writer = stub_writer(driver)
     mock(writer.client).insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo', {
-      rows: entry,
+      rows: [{json: hash_including(entry)}],
       skip_invalid_rows: false,
       ignore_unknown_values: false
     }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) do
@@ -975,16 +892,17 @@ class BigQueryOutputTest < Test::Unit::TestCase
       raise ex
     end
 
-    mock(driver.instance).flush_secondary(is_a(Fluent::Output))
-
-    chunk = Fluent::MemoryBufferChunk.new("my.tag")
-    entry.each do |e|
-      chunk << e.to_msgpack
+    driver.instance_start
+    tag, time, record = "tag", Time.now.to_i, {"a" => "b"}
+    metadata = driver.instance.metadata_for_test(tag, time, record)
+    chunk = driver.instance.buffer.generate_chunk(metadata).tap do |c|
+      c.append([driver.instance.format(tag, time, record)])
     end
-
-    driver.instance.start
-    driver.instance.write(chunk)
-    driver.instance.shutdown
+    assert_raise Fluent::BigQuery::Writer::UnRetryableError do
+      driver.instance.write(chunk)
+    end
+    assert_in_delta driver.instance.retry.secondary_transition_at , Time.now, 0.1
+    driver.instance_shutdown
   end
 
   def test_write_for_load
@@ -1011,8 +929,14 @@ class BigQueryOutputTest < Test::Unit::TestCase
       h[0][:mode] = "NULLABLE"
     end
 
+    driver.instance_start
+    tag, time, record = "tag", Time.now.to_i, {"a" => "b"}
+    metadata = driver.instance.metadata_for_test(tag, time, record)
+    chunk = driver.instance.buffer.generate_chunk(metadata).tap do |c|
+      c.append([driver.instance.format(tag, time, record)])
+    end
+
     writer = stub_writer(driver)
-    chunk = Fluent::MemoryBufferChunk.new("my.tag")
     io = StringIO.new("hello")
     mock(driver.instance).create_upload_source(chunk).yields(io)
     mock(writer).wait_load_job("yourproject_id", "yourdataset_id", "dummy_job_id", "foo") { nil }
@@ -1041,13 +965,8 @@ class BigQueryOutputTest < Test::Unit::TestCase
       s
     end
 
-    entry.each do |e|
-      chunk << MultiJson.dump(e) + "\n"
-    end
-
-    driver.instance.start
     driver.instance.write(chunk)
-    driver.instance.shutdown
+    driver.instance_shutdown
   end
 
   def test_write_for_load_with_prevent_duplicate_load
@@ -1075,7 +994,13 @@ class BigQueryOutputTest < Test::Unit::TestCase
       h[0][:mode] = "NULLABLE"
     end
 
-    chunk = Fluent::MemoryBufferChunk.new("my.tag")
+    driver.instance_start
+    tag, time, record = "tag", Time.now.to_i, {"a" => "b"}
+    metadata = driver.instance.metadata_for_test(tag, time, record)
+    chunk = driver.instance.buffer.generate_chunk(metadata).tap do |c|
+      c.append([driver.instance.format(tag, time, record)])
+    end
+
     io = StringIO.new("hello")
     mock(driver.instance).create_upload_source(chunk).yields(io)
     mock.proxy(driver.instance).create_job_id(duck_type(:unique_id), "yourdataset_id", "foo", driver.instance.instance_variable_get(:@fields).to_a, 0, false)
@@ -1107,13 +1032,8 @@ class BigQueryOutputTest < Test::Unit::TestCase
       s
     end
 
-    entry.each do |e|
-      chunk << MultiJson.dump(e) + "\n"
-    end
-
-    driver.instance.start
     driver.instance.write(chunk)
-    driver.instance.shutdown
+    driver.instance_shutdown
   end
 
   def test_write_for_load_with_retryable_error
@@ -1140,7 +1060,13 @@ class BigQueryOutputTest < Test::Unit::TestCase
       h[0][:mode] = "NULLABLE"
     end
 
-    chunk = Fluent::MemoryBufferChunk.new("my.tag")
+    driver.instance_start
+    tag, time, record = "tag", Time.now.to_i, {"a" => "b"}
+    metadata = driver.instance.metadata_for_test(tag, time, record)
+    chunk = driver.instance.buffer.generate_chunk(metadata).tap do |c|
+      c.append([driver.instance.format(tag, time, record)])
+    end
+
     io = StringIO.new("hello")
     mock(driver.instance).create_upload_source(chunk).yields(io)
     writer = stub_writer(driver)
@@ -1183,15 +1109,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
       s
     end
 
-    entry.each do |e|
-      chunk << MultiJson.dump(e) + "\n"
-    end
-
-    driver.instance.start
     assert_raise Fluent::BigQuery::RetryableError do
       driver.instance.write(chunk)
     end
-    driver.instance.shutdown
+    driver.instance_shutdown
   end
 
   def test_write_for_load_with_not_retryable_error
@@ -1223,7 +1144,13 @@ class BigQueryOutputTest < Test::Unit::TestCase
       h[0][:mode] = "NULLABLE"
     end
 
-    chunk = Fluent::MemoryBufferChunk.new("my.tag")
+    driver.instance_start
+    tag, time, record = "tag", Time.now.to_i, {"a" => "b"}
+    metadata = driver.instance.metadata_for_test(tag, time, record)
+    chunk = driver.instance.buffer.generate_chunk(metadata).tap do |c|
+      c.append([driver.instance.format(tag, time, record)])
+    end
+
     io = StringIO.new("hello")
     mock(driver.instance).create_upload_source(chunk).yields(io)
     writer = stub_writer(driver)
@@ -1266,31 +1193,25 @@ class BigQueryOutputTest < Test::Unit::TestCase
       s
     end
 
-    mock(driver.instance).flush_secondary(is_a(Fluent::Output))
-
-    entry.each do |e|
-      chunk << MultiJson.dump(e) + "\n"
+    assert_raise Fluent::BigQuery::Writer::UnRetryableError do
+      driver.instance.write(chunk)
     end
-
-    driver.instance.start
-    driver.instance.write(chunk)
-    driver.instance.shutdown
+    assert_in_delta driver.instance.retry.secondary_transition_at , Time.now, 0.1
+    driver.instance_shutdown
   end
 
   def test_write_with_row_based_table_id_formatting
     entry = [
-      {json: {a: "b", created_at: Time.local(2014,8,20,9,0,0).to_i}},
-      {json: {b: "c", created_at: Time.local(2014,8,21,9,0,0).to_i}}
+      {json: {a: "b", created_at: Time.local(2014,8,20,9,0,0).strftime("%Y_%m_%d")}},
     ]
     driver = create_driver(<<-CONFIG)
-      table foo_%Y_%m_%d@created_at
+      <buffer created_at>
+      </buffer>
+      table foo_${created_at}
       email foo@bar.example
       private_key_path /path/to/key
       project yourproject_id
       dataset yourdataset_id
-
-      time_format %s
-      time_field  time
 
       field_integer time,status,bytes
       field_string  vhost,path,method,protocol,agent,referer,remote.host,remote.ip,remote.user
@@ -1305,107 +1226,42 @@ class BigQueryOutputTest < Test::Unit::TestCase
       ignore_unknown_values: false
     }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) { stub!.insert_errors { nil } }
 
-    mock(writer.client).insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo_2014_08_21', {
-      rows: [entry[1]],
-      skip_invalid_rows: false,
-      ignore_unknown_values: false
-    }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) { stub!.insert_errors { nil } }
-
-    chunk = Fluent::MemoryBufferChunk.new("my.tag")
-    entry.each do |object|
-      chunk << object.to_msgpack
+    driver.instance_start
+    tag, time, record = "tag", Time.now.to_i, {"a" => "b", "created_at" => Time.local(2014,8,20,9,0,0).strftime("%Y_%m_%d")}
+    metadata = driver.instance.metadata_for_test(tag, time, record)
+    chunk = driver.instance.buffer.generate_chunk(metadata).tap do |c|
+      c.append([driver.instance.format(tag, time, record)])
     end
 
-    driver.instance.start
     driver.instance.write(chunk)
-    driver.instance.shutdown
-  end
-
-  def test_generate_table_id_without_row
-    driver = create_driver
-    table_id_format = 'foo_%Y_%m_%d'
-    time = Time.local(2014, 8, 11, 21, 20, 56)
-    table_id = driver.instance.generate_table_id(table_id_format, time, nil)
-    assert_equal 'foo_2014_08_11', table_id
-  end
-
-  def test_generate_table_id_with_row
-    driver = create_driver
-    table_id_format = 'foo_%Y_%m_%d@created_at'
-    time = Time.local(2014, 8, 11, 21, 20, 56)
-    row = { json: { created_at: Time.local(2014,8,10,21,20,57).to_i } }
-    table_id = driver.instance.generate_table_id(table_id_format, time, row)
-    assert_equal 'foo_2014_08_10', table_id
-  end
-
-  def test_generate_table_id_with_row_nested_attribute
-    driver = create_driver
-    table_id_format = 'foo_%Y_%m_%d@foo.bar.created_at'
-    time = Time.local(2014, 8, 11, 21, 20, 56)
-    row = { json: { foo: { bar: { created_at: Time.local(2014,8,10,21,20,57).to_i } } } }
-    table_id = driver.instance.generate_table_id(table_id_format, time, row)
-    assert_equal 'foo_2014_08_10', table_id
-  end
-
-  def test_generate_table_id_with_time_sliced_format
-    driver = create_driver
-    table_id_format = 'foo_%{time_slice}'
-    current_time = Time.now
-    time = Time.local(2014, 8, 11, 21, 20, 56)
-    row = { "json" => { "foo" => "bar", "time" => time.to_i } }
-    chunk = Object.new
-    mock(chunk).key { time.strftime("%Y%m%d") }
-    table_id = driver.instance.generate_table_id(table_id_format, current_time, row, chunk)
-    assert_equal 'foo_20140811', table_id
-  end
-
-  def test_generate_table_id_with_attribute_replacement
-    driver = create_driver
-    table_id_format = 'foo_%Y_%m_%d_${baz}'
-    current_time = Time.now
-    time = Time.local(2014, 8, 11, 21, 20, 56)
-    [
-      [ { baz: 1234 },         'foo_2014_08_11_1234' ],
-      [ { baz: 'piyo' },       'foo_2014_08_11_piyo' ],
-      [ { baz: true },         'foo_2014_08_11_true' ],
-      [ { baz: nil },          'foo_2014_08_11_' ],
-      [ { baz: '' },           'foo_2014_08_11_' ],
-      [ { baz: "_X-Y.Z !\n" }, 'foo_2014_08_11__XYZ' ],
-      [ { baz: { xyz: 1 } },   'foo_2014_08_11_xyz1' ],
-    ].each do |attrs, expected|
-      row = { json: { created_at: Time.local(2014,8,10,21,20,57).to_i }.merge(attrs) }
-      table_id = driver.instance.generate_table_id(table_id_format, time, row)
-      assert_equal expected, table_id
-    end
+    driver.instance_shutdown
   end
 
   def test_auto_create_table_by_bigquery_api
     now = Time.now
     message = {
-      "json" => {
-        "time" => now.to_i,
-        "request" => {
-          "vhost" => "bar",
-          "path" => "/path/to/baz",
-          "method" => "GET",
-          "protocol" => "HTTP/1.0",
-          "agent" => "libwww",
-          "referer" => "http://referer.example",
-          "time" => (now - 1).to_f,
-          "bot_access" => true,
-          "loginsession" => false,
-        },
-        "remote" => {
-          "host" => "remote.example",
-          "ip" =>  "192.168.1.1",
-          "user" => "nagachika",
-        },
-        "response" => {
-          "status" => 200,
-          "bytes" => 72,
-        },
-      }
-    }.deep_symbolize_keys
+      "time" => now.to_i,
+      "request" => {
+        "vhost" => "bar",
+        "path" => "/path/to/baz",
+        "method" => "GET",
+        "protocol" => "HTTP/1.0",
+        "agent" => "libwww",
+        "referer" => "http://referer.example",
+        "time" => (now - 1).to_f,
+        "bot_access" => true,
+        "loginsession" => false,
+      },
+      "remote" => {
+        "host" => "remote.example",
+        "ip" =>  "192.168.1.1",
+        "user" => "nagachika",
+      },
+      "response" => {
+        "status" => 200,
+        "bytes" => 72,
+      },
+    }
 
     driver = create_driver(<<-CONFIG)
       table foo
@@ -1421,7 +1277,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       schema_path #{File.join(File.dirname(__FILE__), "testdata", "apache.schema")}
     CONFIG
     writer = stub_writer(driver)
-    mock(writer).insert_rows('yourproject_id', 'yourdataset_id', 'foo', [message], hash_including(
+    mock(writer).insert_rows('yourproject_id', 'yourdataset_id', 'foo', [{json: message.deep_symbolize_keys}], hash_including(
       skip_invalid_rows: false,
       ignore_unknown_values: false,
     )) { raise Fluent::BigQuery::RetryableError.new(nil, Google::Apis::ServerError.new("Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404, body: "Not found: Table yourproject_id:yourdataset_id.foo")) }
@@ -1489,15 +1345,17 @@ class BigQueryOutputTest < Test::Unit::TestCase
     )) { raise Fluent::BigQuery::RetryableError.new(nil, Google::Apis::ServerError.new("Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404, body: "Not found: Table yourproject_id:yourdataset_id.foo")) }
     mock(writer).create_table('yourproject_id', 'yourdataset_id', 'foo', driver.instance.instance_variable_get(:@fields), time_partitioning_type: :day, time_partitioning_expiration: 3600)
 
-    chunk = Fluent::MemoryBufferChunk.new("my.tag")
-    chunk << message.to_msgpack
-
-    driver.instance.start
+    driver.instance_start
+    tag, time, record = "tag", Time.now.to_i, message
+    metadata = driver.instance.metadata_for_test(tag, time, record)
+    chunk = driver.instance.buffer.generate_chunk(metadata).tap do |c|
+      c.append([driver.instance.format(tag, time, record)])
+    end
 
     assert_raise(RuntimeError) {
       driver.instance.write(chunk)
     }
-    driver.instance.shutdown
+    driver.instance_shutdown
   end
 
   private

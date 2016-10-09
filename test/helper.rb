@@ -22,11 +22,15 @@ unless ENV.has_key?('VERBOSE')
   $log = nulllogger
 end
 
-require 'fluent/buffer'
+require 'fluent/plugin/buffer'
 require 'fluent/plugin/buf_memory'
 require 'fluent/plugin/buf_file'
+require 'fluent/test/driver/output'
 
 require 'fluent/plugin/out_bigquery'
+require 'google/apis/bigquery_v2'
+require 'google/api_client/auth/key_utils'
+require 'googleauth'
 
 require 'rr'
 require 'test/unit/rr'
