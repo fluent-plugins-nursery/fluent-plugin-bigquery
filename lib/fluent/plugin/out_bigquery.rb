@@ -116,8 +116,6 @@ module Fluent
       config_param :convert_hash_to_json, :bool, default: false
 
       config_param :time_format, :string, default: nil
-      config_param :localtime, :bool, default: nil
-      config_param :utc, :bool, default: nil
       config_param :time_field, :string, default: nil
 
       # insert_id_field (only insert)
@@ -243,9 +241,7 @@ module Fluent
           @regexps[regexp] = replacement
         end
 
-        @localtime = false if @localtime.nil? && @utc
-
-        @timef = TimeFormatter.new(@time_format, @localtime)
+        @timef = TimeFormatter.new(@time_format, !@buffer_config.timekey_use_utc, @buffer_config.timekey_zone)
 
         if @time_field
           keys = @time_field.split('.')
