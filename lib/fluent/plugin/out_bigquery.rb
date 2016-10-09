@@ -2,9 +2,6 @@
 
 require 'fluent/plugin/bigquery/version'
 
-require 'fluent/mixin/config_placeholders'
-require 'fluent/mixin/plaintextformatter'
-
 require 'fluent/plugin/bigquery/errors'
 require 'fluent/plugin/bigquery/schema'
 require 'fluent/plugin/bigquery/writer'

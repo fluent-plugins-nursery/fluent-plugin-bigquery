@@ -28,6 +28,4 @@ Gem::Specification.new do |spec|
   spec.add_runtime_dependency "multi_json"
   spec.add_runtime_dependency "activesupport", ">= 3.2", "< 5"
   spec.add_runtime_dependency "fluentd", "~> 0.14.0"
-  spec.add_runtime_dependency "fluent-mixin-plaintextformatter", '>= 0.2.1'
-  spec.add_runtime_dependency "fluent-mixin-config-placeholders", ">= 0.3.0"
 end
