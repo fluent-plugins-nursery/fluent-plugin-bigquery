@@ -330,6 +330,12 @@ module Fluent
         _write(chunk, table_id_format, template_suffix_format)
       end
 
+      # for delayed commit
+      def try_write(chunk)
+        write(chunk)
+        commit_write(chunk.unique_id, delayed: true)
+      end
+
       def fetch_schema(allow_overwrite = true)
         table_id = nil
         @fetch_schema_mutex.synchronize do
