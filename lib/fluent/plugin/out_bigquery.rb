@@ -6,9 +6,6 @@ require 'fluent/plugin/bigquery/errors'
 require 'fluent/plugin/bigquery/schema'
 require 'fluent/plugin/bigquery/writer'
 
-## TODO: load implementation
-# require 'fluent/plugin/bigquery/load_request_body_wrapper'
-
 module Fluent
   module Plugin
     class BigQueryOutput < Output
@@ -379,7 +376,7 @@ module Fluent
             end
           end
 
-          group = rows.group_by do |row|
+          group = rows.group_by do |_|
             [
               extract_placeholders(table_format, chunk.metadata),
               template_suffix_format ? extract_placeholders(template_suffix_format, chunk.metadata) : nil,
@@ -399,9 +396,9 @@ module Fluent
             raise "table created. send rows next time."
           end
 
-          if e.retryable?
-            raise e
-          elsif @secondary
+          raise if e.retryable?
+
+          if @secondary
             # TODO: find better way
             @retry = retry_state_create(
               :output_retries, @buffer_config.retry_type, @buffer_config.retry_wait, @buffer_config.retry_timeout,
@@ -410,7 +407,6 @@ module Fluent
               secondary: true, secondary_threshold: Float::EPSILON,
               randomize: @buffer_config.retry_randomize
             )
-            raise e
           else
             @retry = retry_state_create(
               :output_retries, @buffer_config.retry_type, @buffer_config.retry_wait, @buffer_config.retry_timeout,
@@ -418,8 +414,9 @@ module Fluent
               max_interval: @buffer_config.retry_max_interval,
               randomize: @buffer_config.retry_randomize
             )
-            raise e
           end
+
+          raise
         end
       end
 
@@ -441,14 +438,14 @@ module Fluent
           create_upload_source(chunk) do |upload_source|
             res = writer.create_load_job(@project, @dataset, table_id, upload_source, job_id, @fields, {
               ignore_unknown_values: @ignore_unknown_values, max_bad_records: @max_bad_records,
-              timeout_sec: @request_timeout_sec,  open_timeout_sec: @request_open_timeout_sec, auto_create_table: @auto_create_table,
+              timeout_sec: @request_timeout_sec, open_timeout_sec: @request_open_timeout_sec, auto_create_table: @auto_create_table,
               time_partitioning_type: @time_partitioning_type, time_partitioning_expiration: @time_partitioning_expiration
             })
           end
         rescue Fluent::BigQuery::Error => e
-          if e.retryable?
-            raise e
-          elsif @secondary
+          raise if e.retryable?
+
+          if @secondary
             # TODO: find better way
             @retry = retry_state_create(
               :output_retries, @buffer_config.retry_type, @buffer_config.retry_wait, @buffer_config.retry_timeout,
@@ -457,7 +454,6 @@ module Fluent
               secondary: true, secondary_threshold: Float::EPSILON,
               randomize: @buffer_config.retry_randomize
             )
-            raise e
           else
             @retry = retry_state_create(
               :output_retries, @buffer_config.retry_type, @buffer_config.retry_wait, @buffer_config.retry_timeout,
@@ -465,8 +461,9 @@ module Fluent
               max_interval: @buffer_config.retry_max_interval,
               randomize: @buffer_config.retry_randomize
             )
-            raise e
           end
+
+          raise
         end
 
         private
@@ -489,7 +486,7 @@ module Fluent
         end
 
         def create_job_id(chunk, dataset, table, schema, max_bad_records, ignore_unknown_values)
-          "fluentd_job_" + Digest::SHA1.hexdigest("#{chunk.unique_id}#{dataset}#{table}#{schema.to_s}#{max_bad_records}#{ignore_unknown_values}")
+          "fluentd_job_" + Digest::SHA1.hexdigest("#{chunk.unique_id}#{dataset}#{table}#{schema}#{max_bad_records}#{ignore_unknown_values}")
         end
       end
     end
