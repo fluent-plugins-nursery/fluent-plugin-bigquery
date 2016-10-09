@@ -407,7 +407,7 @@ module Fluent
               :output_retries, @buffer_config.retry_type, @buffer_config.retry_wait, @buffer_config.retry_timeout,
               forever: false, max_steps: @buffer_config.retry_max_times, backoff_base: @buffer_config.retry_exponential_backoff_base,
               max_interval: @buffer_config.retry_max_interval,
-              secondary: true, secondary_threshold: 0.00000000001,
+              secondary: true, secondary_threshold: Float::EPSILON,
               randomize: @buffer_config.retry_randomize
             )
             raise e
@@ -454,7 +454,7 @@ module Fluent
               :output_retries, @buffer_config.retry_type, @buffer_config.retry_wait, @buffer_config.retry_timeout,
               forever: false, max_steps: @buffer_config.retry_max_times, backoff_base: @buffer_config.retry_exponential_backoff_base,
               max_interval: @buffer_config.retry_max_interval,
-              secondary: true, secondary_threshold: 0.00000000001,
+              secondary: true, secondary_threshold: Float::EPSILON,
               randomize: @buffer_config.retry_randomize
             )
             raise e
