@@ -188,8 +188,6 @@ module Fluent
         when :load
           raise Fluent::ConfigError, "'template_suffix' is for only `insert` mode, instead use 'fetch_schema_table' and formatted table name" if @template_suffix
           extend(LoadImplementation)
-        else
-          raise Fluent::ConfigError "'method' must be 'insert' or 'load'"
         end
 
         case @auth_method
