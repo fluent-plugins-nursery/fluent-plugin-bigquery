@@ -12,8 +12,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
     project yourproject_id
     dataset yourdataset_id
 
+    <inject>
     time_format %s
-    time_field  time
+    time_key  time
+    </inject>
 
     field_integer time,status,bytes
     field_string  vhost,path,method,protocol,agent,referer,remote.host,remote.ip,remote.user
@@ -193,8 +195,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
       project yourproject_id
       dataset yourdataset_id
 
+      <inject>
       time_format %s
-      time_field  time
+      time_key  time
+      </inject>
 
       field_integer time  , status , bytes
       field_string  _log_name, vhost, path, method, protocol, agent, referer, remote.host, remote.ip, remote.user
@@ -228,8 +232,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
       project yourproject_id
       dataset yourdataset_id
 
+      <inject>
       time_format %s
-      time_field  time
+      time_key  time
+      </inject>
     ]
 
     assert_raises(Fluent::ConfigError) do
@@ -342,8 +348,11 @@ class BigQueryOutputTest < Test::Unit::TestCase
         project yourproject_id
         dataset yourdataset_id
 
+        <inject>
         time_format #{format}
-        time_field  time
+        time_type string
+        time_key  time
+        </inject>
         #{type}     time
       CONFIG
 
@@ -353,43 +362,6 @@ class BigQueryOutputTest < Test::Unit::TestCase
 
       assert[self, expected["time"], MultiJson.load(buf)["time"]]
     end
-  end
-
-  def test_format_nested_time
-    now = Time.now
-    input = {
-      "metadata" => {
-        "node" => "mynode.example",
-      },
-      "log" => "something",
-    }
-    expected = {
-      "metadata" => {
-        "time" => now.strftime("%s").to_i,
-        "node" => "mynode.example",
-      },
-      "log" => "something",
-    }
-
-    driver = create_driver(<<-CONFIG)
-      table foo
-      email foo@bar.example
-      private_key_path /path/to/key
-      project yourproject_id
-      dataset yourdataset_id
-
-      time_format %s
-      time_field  metadata.time
-
-      field_integer metadata.time
-      field_string  metadata.node,log
-    CONFIG
-
-    driver.instance_start
-    buf = driver.instance.format("my.tag", now, input)
-    driver.instance.shutdown
-
-    assert_equal expected, MultiJson.load(buf)
   end
 
   def test_format_with_schema
@@ -459,8 +431,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
       project yourproject_id
       dataset yourdataset_id
 
+      <inject>
       time_format %s
-      time_field  time
+      time_key  time
+      </inject>
 
       schema_path #{File.join(File.dirname(__FILE__), "testdata", "apache.schema")}
       field_integer time
@@ -494,8 +468,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
       project yourproject_id
       dataset yourdataset_id
 
+      <inject>
       time_format %s
-      time_field  time
+      time_key  time
+      </inject>
 
       schema_path #{File.join(File.dirname(__FILE__), "testdata", "sudo.schema")}
       field_integer time
@@ -529,8 +505,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
       project yourproject_id
       dataset yourdataset_id
 
+      <inject>
       time_format %s
-      time_field  time
+      time_key  time
+      </inject>
 
       fetch_schema true
       field_integer time
@@ -590,8 +568,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
       project yourproject_id
       dataset yourdataset_id
 
+      <inject>
       time_format %s
-      time_field  time
+      time_key  time
+      </inject>
 
       fetch_schema true
       fetch_schema_table foo
@@ -722,8 +702,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
       replace_record_key true
       replace_record_key_regexp1 - _
 
+      <inject>
       time_format %s
-      time_field time
+      time_key time
+      </inject>
 
       field_integer time
       field_string vhost, referer
@@ -768,8 +750,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
 
       convert_hash_to_json true
 
+      <inject>
       time_format %s
-      time_field time
+      time_key time
+      </inject>
 
       field_integer time
       field_string vhost, referer, remote
@@ -819,8 +803,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
       project yourproject_id
       dataset yourdataset_id
 
+      <inject>
       time_format %s
-      time_field  time
+      time_key  time
+      </inject>
 
       field_integer time,status,bytes
       field_string  vhost,path,method,protocol,agent,referer,remote.host,remote.ip,remote.user
@@ -864,8 +850,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
       project yourproject_id
       dataset yourdataset_id
 
+      <inject>
       time_format %s
-      time_field  time
+      time_key  time
+      </inject>
 
       field_integer time,status,bytes
       field_string  vhost,path,method,protocol,agent,referer,remote.host,remote.ip,remote.user
@@ -916,8 +904,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
       project yourproject_id
       dataset yourdataset_id
 
+      <inject>
       time_format %s
-      time_field  time
+      time_key  time
+      </inject>
 
       schema_path #{schema_path}
       field_integer time
@@ -980,8 +970,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
       project yourproject_id
       dataset yourdataset_id
 
+      <inject>
       time_format %s
-      time_field  time
+      time_key  time
+      </inject>
 
       schema_path #{schema_path}
       field_integer time
@@ -1047,8 +1039,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
       project yourproject_id
       dataset yourdataset_id
 
+      <inject>
       time_format %s
-      time_field  time
+      time_key  time
+      </inject>
 
       schema_path #{schema_path}
       field_integer time
@@ -1126,8 +1120,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
       project yourproject_id
       dataset yourdataset_id
 
+      <inject>
       time_format %s
-      time_field  time
+      time_key  time
+      </inject>
 
       schema_path #{schema_path}
       field_integer time
@@ -1270,8 +1266,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
       project yourproject_id
       dataset yourdataset_id
 
+      <inject>
       time_format %s
-      time_field  time
+      time_key  time
+      </inject>
 
       auto_create_table true
       schema_path #{File.join(File.dirname(__FILE__), "testdata", "apache.schema")}
