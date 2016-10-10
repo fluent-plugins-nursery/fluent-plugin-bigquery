@@ -60,7 +60,7 @@ OAuth flow for installed applications.
 | :------------------------------------- | :------------ | :----------- | :-------------------------     | :-----------------------           |
 | @type                                  | string        | no           | memory (insert) or file (load) |                                    |
 | chunk_limit_size                       | integer       | no           | 1MB (insert) or 1GB (load)     |                                    |
-| queue_length_limit                     | integer       | no           | 1024 (insert) or 32 (load)     |                                    |
+| total_limit_size                       | integer       | no           | 1GB (insert) or 32GB (load)    |                                    |
 | chunk_records_limit                    | integer       | no           | 500 (insert) or nil (load)     |                                    |
 | flush_mode                             | enum          | no           | interval                       | default, lazy, interval, immediate |
 | flush_interval                         | float         | no           | 0.25 (insert) or nil (load)    |                                    |

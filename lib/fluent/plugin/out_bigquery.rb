@@ -28,7 +28,7 @@ module Fluent
         buffer_config["flush_thread_interval"]       = 0.05          unless buffer_config["flush_thread_interval"]
         buffer_config["flush_thread_burst_interval"] = 0.05          unless buffer_config["flush_thread_burst_interval"]
         buffer_config["chunk_limit_size"]            = 1 * 1024 ** 2 unless buffer_config["chunk_limit_size"] # 1MB
-        buffer_config["queue_length_limit"]          = 1024          unless buffer_config["queue_length_limit"]
+        buffer_config["total_limit_size"]            = 1 * 1024 ** 3 unless buffer_config["total_limit_size"] # 1GB
         buffer_config["chunk_records_limit"]         = 500           unless buffer_config["chunk_records_limit"]
       end
 
@@ -38,10 +38,10 @@ module Fluent
 
         buffer_config = conf.elements("buffer")[0]
         return unless buffer_config
-        buffer_config["@type"]                       = "file"        unless buffer_config["@type"]
-        buffer_config["flush_mode"]                  = :interval     unless buffer_config["flush_mode"]
-        buffer_config["chunk_limit_size"]            = 1 * 1024 ** 3 unless buffer_config["chunk_limit_size"] # 1GB
-        buffer_config["queue_length_limit"]          = 32            unless buffer_config["queue_length_limit"]
+        buffer_config["@type"]                       = "file"         unless buffer_config["@type"]
+        buffer_config["flush_mode"]                  = :interval      unless buffer_config["flush_mode"]
+        buffer_config["chunk_limit_size"]            = 1 * 1024 ** 3  unless buffer_config["chunk_limit_size"] # 1GB
+        buffer_config["total_limit_size"]            = 32 * 1024 ** 3 unless buffer_config["total_limit_size"] # 32GB
       end
 
       # Available methods are:
