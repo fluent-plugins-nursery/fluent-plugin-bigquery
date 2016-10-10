@@ -69,7 +69,7 @@ module Fluent
       # table_id
       #   In Table ID, enter a name for your new table. Naming rules are the same as for your dataset.
       config_param :table, :string, default: nil
-      config_param :tables, :string, default: nil # TODO: use :array with value_type: :string
+      config_param :tables, :array, value_type: :string, default: nil
 
       # template_suffix (only insert)
       #   https://cloud.google.com/bigquery/streaming-data-into-bigquery#template_table_details
@@ -95,11 +95,11 @@ module Fluent
       config_param :fetch_schema, :bool, default: false
       config_param :fetch_schema_table, :string, default: nil
       config_param :schema_cache_expire, :time, default: 600
-      config_param :field_string,  :string, default: nil
-      config_param :field_integer, :string, default: nil
-      config_param :field_float,   :string, default: nil
-      config_param :field_boolean, :string, default: nil
-      config_param :field_timestamp, :string, default: nil
+      config_param :field_string,    :array, value_type: :string, default: nil
+      config_param :field_integer,   :array, value_type: :string, default: nil
+      config_param :field_float,     :array, value_type: :string, default: nil
+      config_param :field_boolean,   :array, value_type: :string, default: nil
+      config_param :field_timestamp, :array, value_type: :string, default: nil
       ### TODO: record field stream inserts doesn't works well?
       ###  At table creation, table type json + field type record -> field type validation fails
       ###  At streaming inserts, schema cannot be specified
@@ -213,7 +213,7 @@ module Fluent
           raise Fluent::ConfigError, "'table' or 'tables' must be specified, and both are invalid"
         end
 
-        @tablelist = @tables ? @tables.split(',') : [@table]
+        @tablelist = @tables ? @tables : [@table]
 
         @fields = Fluent::BigQuery::RecordSchema.new('record')
         if @schema_path
@@ -222,9 +222,9 @@ module Fluent
 
         types = %w(string integer float boolean timestamp)
         types.each do |type|
-          raw_fields = instance_variable_get("@field_#{type}")
-          next unless raw_fields
-          raw_fields.split(',').each do |field|
+          fields = instance_variable_get("@field_#{type}")
+          next unless fields
+          fields.each do |field|
             @fields.register_field field.strip, type.to_sym
           end
         end
