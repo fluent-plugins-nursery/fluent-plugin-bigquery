@@ -314,9 +314,8 @@ class BigQueryOutputTest < Test::Unit::TestCase
     }
 
     driver = create_driver(CONFIG)
-    driver.instance_start
-    buf = driver.instance.format("my.tag", now, input)
-    driver.instance_shutdown
+    buf = nil
+    driver.run { buf = driver.instance.format("my.tag", now, input) }
 
     assert_equal expected, MultiJson.load(buf)
   end
@@ -356,9 +355,8 @@ class BigQueryOutputTest < Test::Unit::TestCase
         #{type}     time
       CONFIG
 
-      driver.instance_start
-      buf = driver.instance.format("my.tag", now, input)
-      driver.instance_shutdown
+      buf = nil
+      driver.run { buf = driver.instance.format("my.tag", now, input) }
 
       assert[self, expected["time"], MultiJson.load(buf)["time"]]
     end
@@ -439,9 +437,9 @@ class BigQueryOutputTest < Test::Unit::TestCase
       schema_path #{File.join(File.dirname(__FILE__), "testdata", "apache.schema")}
       field_integer time
     CONFIG
-    driver.instance_start
-    buf = driver.instance.format("my.tag", now, input)
-    driver.instance_shutdown
+
+    buf = nil
+    driver.run { buf = driver.instance.format("my.tag", now, input) }
 
     assert_equal expected, MultiJson.load(buf)
   end
@@ -476,9 +474,9 @@ class BigQueryOutputTest < Test::Unit::TestCase
       schema_path #{File.join(File.dirname(__FILE__), "testdata", "sudo.schema")}
       field_integer time
     CONFIG
-    driver.instance_start
-    buf = driver.instance.format("my.tag", now, input)
-    driver.instance_shutdown
+
+    buf = nil
+    driver.run { buf = driver.instance.format("my.tag", now, input) }
 
     assert_equal expected, MultiJson.load(buf)
   end
@@ -518,9 +516,9 @@ class BigQueryOutputTest < Test::Unit::TestCase
     mock(writer).fetch_schema('yourproject_id', 'yourdataset_id', 'foo') do
       sudo_schema_response.deep_stringify_keys["schema"]["fields"]
     end
-    driver.instance_start
-    buf = driver.instance.format("my.tag", now, input)
-    driver.instance_shutdown
+
+    buf = nil
+    driver.run { buf = driver.instance.format("my.tag", now, input) }
 
     assert_equal expected, MultiJson.load(buf)
 
@@ -582,9 +580,9 @@ class BigQueryOutputTest < Test::Unit::TestCase
     mock(writer).fetch_schema('yourproject_id', 'yourdataset_id', now.strftime('foo')) do
       sudo_schema_response.deep_stringify_keys["schema"]["fields"]
     end
-    driver.instance_start
-    buf = driver.instance.format("my.tag", now, input)
-    driver.instance_shutdown
+
+    buf = nil
+    driver.run { buf = driver.instance.format("my.tag", now, input) }
 
     assert_equal expected, MultiJson.load(buf)
 
@@ -633,12 +631,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
       field_string uuid
     CONFIG
     mock(driver.instance).insert("foo", [expected], nil)
-    driver.instance_start
+
     driver.run do
       driver.feed('tag', now, input)
-      driver.flush
     end
-    driver.instance_shutdown
   end
 
   def test__write_with_nested_insert_id
@@ -667,13 +663,12 @@ class BigQueryOutputTest < Test::Unit::TestCase
       insert_id_field data.uuid
       field_string data.uuid
     CONFIG
+
     mock(driver.instance).insert("foo", [expected], nil)
-    driver.instance_start
+
     driver.run do
       driver.feed('tag', now, input)
-      driver.flush
     end
-    driver.instance_shutdown
   end
 
   def test_replace_record_key
@@ -711,9 +706,9 @@ class BigQueryOutputTest < Test::Unit::TestCase
       field_string vhost, referer
       field_boolean bot_access, login_session
     CONFIG
-    driver.instance.start
-    buf = driver.instance.format("my.tag", now, input)
-    driver.instance.shutdown
+
+    buf = nil
+    driver.run { buf = driver.instance.format("my.tag", now, input) }
 
     assert_equal expected, MultiJson.load(buf)
   end
@@ -759,9 +754,9 @@ class BigQueryOutputTest < Test::Unit::TestCase
       field_string vhost, referer, remote
       field_boolean bot_access, loginsession
     CONFIG
-    driver.instance.start
-    buf = driver.instance.format("my.tag", now, input)
-    driver.instance.shutdown
+
+    buf = nil
+    driver.run { buf = driver.instance.format("my.tag", now, input) }
 
     assert_equal expected, MultiJson.load(buf)
   end
@@ -785,14 +780,9 @@ class BigQueryOutputTest < Test::Unit::TestCase
       s
     end
 
-    driver.instance_start
-    tag, time, record = "tag", Time.now.to_i, {"a" => "b"}
-    metadata = driver.instance.metadata_for_test(tag, time, record)
-    chunk = driver.instance.buffer.generate_chunk(metadata).tap do |c|
-      c.append([driver.instance.format(tag, time, record)])
+    driver.run do
+      driver.feed("tag", Time.now.to_i, {"a" => "b"})
     end
-    driver.instance.write(chunk)
-    driver.instance_shutdown
   end
 
   def test_write_with_retryable_error
@@ -830,16 +820,15 @@ class BigQueryOutputTest < Test::Unit::TestCase
       raise ex
     end
 
-    driver.instance_start
-    tag, time, record = "tag", Time.now.to_i, {"a" => "b"}
-    metadata = driver.instance.metadata_for_test(tag, time, record)
-    chunk = driver.instance.buffer.generate_chunk(metadata).tap do |c|
-      c.append([driver.instance.format(tag, time, record)])
+    error = nil
+    begin
+      driver.run do
+        driver.feed("tag", Time.now.to_i, {"a" => "b"})
+      end
+    rescue ThreadError => e
+      error = e.cause
     end
-    assert_raise Fluent::BigQuery::RetryableError do
-      driver.instance.write(chunk)
-    end
-    driver.instance_shutdown
+    assert_kind_of(Fluent::BigQuery::RetryableError, error)
   end
 
   def test_write_with_not_retryable_error
@@ -919,16 +908,9 @@ class BigQueryOutputTest < Test::Unit::TestCase
       h[0][:mode] = "NULLABLE"
     end
 
-    driver.instance_start
-    tag, time, record = "tag", Time.now.to_i, {"a" => "b"}
-    metadata = driver.instance.metadata_for_test(tag, time, record)
-    chunk = driver.instance.buffer.generate_chunk(metadata).tap do |c|
-      c.append([driver.instance.format(tag, time, record)])
-    end
-
     writer = stub_writer(driver)
     io = StringIO.new("hello")
-    mock(driver.instance).create_upload_source(chunk).yields(io)
+    mock(driver.instance).create_upload_source(is_a(Fluent::Plugin::Buffer::Chunk)).yields(io)
     mock(writer).wait_load_job("yourproject_id", "yourdataset_id", "dummy_job_id", "foo") { nil }
     mock(writer.client).insert_job('yourproject_id', {
       configuration: {
@@ -955,8 +937,9 @@ class BigQueryOutputTest < Test::Unit::TestCase
       s
     end
 
-    driver.instance.write(chunk)
-    driver.instance_shutdown
+    driver.run do
+      driver.feed("tag", Time.now.to_i, {"a" => "b"})
+    end
   end
 
   def test_write_for_load_with_prevent_duplicate_load
@@ -986,15 +969,8 @@ class BigQueryOutputTest < Test::Unit::TestCase
       h[0][:mode] = "NULLABLE"
     end
 
-    driver.instance_start
-    tag, time, record = "tag", Time.now.to_i, {"a" => "b"}
-    metadata = driver.instance.metadata_for_test(tag, time, record)
-    chunk = driver.instance.buffer.generate_chunk(metadata).tap do |c|
-      c.append([driver.instance.format(tag, time, record)])
-    end
-
     io = StringIO.new("hello")
-    mock(driver.instance).create_upload_source(chunk).yields(io)
+    mock(driver.instance).create_upload_source(is_a(Fluent::Plugin::Buffer::Chunk)).yields(io)
     mock.proxy(driver.instance).create_job_id(duck_type(:unique_id), "yourdataset_id", "foo", driver.instance.instance_variable_get(:@fields).to_a, 0, false)
     writer = stub_writer(driver)
     mock(writer).wait_load_job("yourproject_id", "yourdataset_id", "dummy_job_id", "foo") { nil }
@@ -1024,8 +1000,9 @@ class BigQueryOutputTest < Test::Unit::TestCase
       s
     end
 
-    driver.instance.write(chunk)
-    driver.instance_shutdown
+    driver.run do
+      driver.feed("tag", Time.now.to_i, {"a" => "b"})
+    end
   end
 
   def test_write_for_load_with_retryable_error
@@ -1222,15 +1199,9 @@ class BigQueryOutputTest < Test::Unit::TestCase
       ignore_unknown_values: false
     }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) { stub!.insert_errors { nil } }
 
-    driver.instance_start
-    tag, time, record = "tag", Time.now.to_i, {"a" => "b", "created_at" => Time.local(2014,8,20,9,0,0).strftime("%Y_%m_%d")}
-    metadata = driver.instance.metadata_for_test(tag, time, record)
-    chunk = driver.instance.buffer.generate_chunk(metadata).tap do |c|
-      c.append([driver.instance.format(tag, time, record)])
+    driver.run do
+      driver.feed("tag", Time.now.to_i, {"a" => "b", "created_at" => Time.local(2014,8,20,9,0,0).strftime("%Y_%m_%d")})
     end
-
-    driver.instance.write(chunk)
-    driver.instance_shutdown
   end
 
   def test_auto_create_table_by_bigquery_api
