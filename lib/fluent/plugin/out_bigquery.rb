@@ -18,7 +18,7 @@ module Fluent
 
       ### default for insert
       def configure_for_insert(conf)
-        raise ConfigError unless conf["method"] != "load"
+        raise ConfigError unless conf["method"].nil? || conf["method"] == "insert"
 
         buffer_config = conf.elements("buffer")[0]
         return unless buffer_config
