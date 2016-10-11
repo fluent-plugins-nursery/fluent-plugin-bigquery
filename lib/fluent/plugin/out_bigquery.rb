@@ -220,7 +220,7 @@ module Fluent
           fields = instance_variable_get("@field_#{type}")
           next unless fields
           fields.each do |field|
-            @fields.register_field field.strip, type
+            @fields.register_field field, type
           end
         end
 
