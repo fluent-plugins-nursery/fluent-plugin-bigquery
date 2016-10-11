@@ -215,12 +215,12 @@ module Fluent
           @fields.load_schema(MultiJson.load(File.read(@schema_path)))
         end
 
-        types = %w(string integer float boolean timestamp)
+        types = %i(string integer float boolean timestamp)
         types.each do |type|
           fields = instance_variable_get("@field_#{type}")
           next unless fields
           fields.each do |field|
-            @fields.register_field field.strip, type.to_sym
+            @fields.register_field field.strip, type
           end
         end
 
