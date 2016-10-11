@@ -246,7 +246,7 @@ module Fluent
       def start
         super
 
-        @tables_queue = @tablelist.dup.shuffle
+        @tables_queue = @tablelist.shuffle
         @tables_mutex = Mutex.new
         @fetch_schema_mutex = Mutex.new
 
