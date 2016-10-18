@@ -143,6 +143,10 @@ module Fluent
     config_param :request_timeout_sec, :time, default: nil
     config_param :request_open_timeout_sec, :time, default: 60
 
+    ## Partitioning
+    config_param :time_partitioning_type, :string, default: nil
+    config_param :time_partitioning_expiration, :integer, default: nil
+
     ### Table types
     # https://developers.google.com/bigquery/docs/tables
     #
@@ -413,7 +417,7 @@ module Fluent
       rescue Fluent::BigQuery::Writer::Error => e
         if @auto_create_table && e.status_code == 404 && /Not Found: Table/i =~ e.message
           # Table Not Found: Auto Create Table
-          writer.create_table(@project, @dataset, table_id, @fields)
+          writer.create_table(@project, @dataset, table_id, @fields, time_partitioning_type: @time_partitioning_type, time_partitioning_expiration: @time_partitioning_expiration)
           raise "table created. send rows next time."
         end
 
@@ -459,7 +463,8 @@ module Fluent
         create_upload_source(chunk) do |upload_source|
           res = writer.create_load_job(@project, @dataset, table_id, upload_source, job_id, @fields, {
             ignore_unknown_values: @ignore_unknown_values, max_bad_records: @max_bad_records,
-            timeout_sec: @request_timeout_sec,  open_timeout_sec: @request_open_timeout_sec,
+            timeout_sec: @request_timeout_sec,  open_timeout_sec: @request_open_timeout_sec, auto_create_table: @auto_create_table,
+            time_partitioning_type: @time_partitioning_type, time_partitioning_expiration: @time_partitioning_expiration
           })
         end
       rescue Fluent::BigQuery::Writer::Error => e

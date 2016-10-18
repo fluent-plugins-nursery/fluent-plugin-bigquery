@@ -1034,6 +1034,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
           source_format: "NEWLINE_DELIMITED_JSON",
           ignore_unknown_values: false,
           max_bad_records: 0,
+          create_disposition: 'CREATE_NEVER'
         }
       }
     }, {upload_source: io, content_type: "application/octet-stream", options: {timeout_sec: nil, open_timeout_sec: 60}}) do
@@ -1099,6 +1100,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
           source_format: "NEWLINE_DELIMITED_JSON",
           ignore_unknown_values: false,
           max_bad_records: 0,
+          create_disposition: 'CREATE_NEVER'
         },
       },
       job_reference: {project_id: 'yourproject_id', job_id: satisfy { |x| x =~ /fluentd_job_.*/}} ,
@@ -1162,6 +1164,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
           source_format: "NEWLINE_DELIMITED_JSON",
           ignore_unknown_values: false,
           max_bad_records: 0,
+          create_disposition: 'CREATE_NEVER'
         }
       }
     }, {upload_source: io, content_type: "application/octet-stream", options: {timeout_sec: nil, open_timeout_sec: 60}}) do
@@ -1245,6 +1248,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
           source_format: "NEWLINE_DELIMITED_JSON",
           ignore_unknown_values: false,
           max_bad_records: 0,
+          create_disposition: 'CREATE_NEVER'
         }
       }
     }, {upload_source: io, content_type: "application/octet-stream", options: {timeout_sec: nil, open_timeout_sec: 60}}) do
@@ -1428,7 +1432,69 @@ class BigQueryOutputTest < Test::Unit::TestCase
       skip_invalid_rows: false,
       ignore_unknown_values: false,
     )) { raise Fluent::BigQuery::Writer::RetryableError.new(nil, Google::Apis::ServerError.new("Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404, body: "Not found: Table yourproject_id:yourdataset_id.foo")) }
-    mock(writer).create_table('yourproject_id', 'yourdataset_id', 'foo', driver.instance.instance_variable_get(:@fields))
+    mock(writer).create_table('yourproject_id', 'yourdataset_id', 'foo', driver.instance.instance_variable_get(:@fields), time_partitioning_type: nil, time_partitioning_expiration: nil)
+
+    chunk = Fluent::MemoryBufferChunk.new("my.tag")
+    chunk << message.to_msgpack
+
+    driver.instance.start
+
+    assert_raise(RuntimeError) {
+      driver.instance.write(chunk)
+    }
+    driver.instance.shutdown
+  end
+
+  def test_auto_create_partitioned_table_by_bigquery_api
+    now = Time.now
+    message = {
+      "json" => {
+        "time" => now.to_i,
+        "request" => {
+          "vhost" => "bar",
+          "path" => "/path/to/baz",
+          "method" => "GET",
+          "protocol" => "HTTP/1.0",
+          "agent" => "libwww",
+          "referer" => "http://referer.example",
+          "time" => (now - 1).to_f,
+          "bot_access" => true,
+          "loginsession" => false,
+        },
+        "remote" => {
+          "host" => "remote.example",
+          "ip" =>  "192.168.1.1",
+          "user" => "nagachika",
+        },
+        "response" => {
+          "status" => 200,
+          "bytes" => 72,
+        },
+      }
+    }.deep_symbolize_keys
+
+    driver = create_driver(<<-CONFIG)
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      time_format %s
+      time_field  time
+
+      auto_create_table true
+      schema_path #{File.join(File.dirname(__FILE__), "testdata", "apache.schema")}
+
+      time_partitioning_type DAY
+      time_partitioning_expiration 3600
+    CONFIG
+    writer = stub_writer(driver)
+    mock(writer).insert_rows('yourproject_id', 'yourdataset_id', 'foo', [message], hash_including(
+      skip_invalid_rows: false,
+      ignore_unknown_values: false,
+    )) { raise Fluent::BigQuery::Writer::RetryableError.new(nil, Google::Apis::ServerError.new("Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404, body: "Not found: Table yourproject_id:yourdataset_id.foo")) }
+    mock(writer).create_table('yourproject_id', 'yourdataset_id', 'foo', driver.instance.instance_variable_get(:@fields), time_partitioning_type: 'DAY', time_partitioning_expiration: 3600)
 
     chunk = Fluent::MemoryBufferChunk.new("my.tag")
     chunk << message.to_msgpack

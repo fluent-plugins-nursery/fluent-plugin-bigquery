@@ -10,7 +10,7 @@
 * load data
   * for data loading as batch jobs, for big amount of data
   * https://developers.google.com/bigquery/loading-data-into-bigquery
-  
+
 Current version of this plugin supports Google API with Service Account Authentication, but does not support
 OAuth flow for installed applications.
 
@@ -57,6 +57,8 @@ OAuth flow for installed applications.
 | insert_id_field                        | string        | no                          | nil                                                    | Use key as `insert_id` of Streaming Insert API parameter.                                                            |
 | request_timeout_sec                    | integer       | no                          | nil                                                    | Bigquery API response timeout                                                                                        |
 | request_open_timeout_sec               | integer       | no                          | 60                                                     | Bigquery API connection, and request timeout. If you send big data to Bigquery, set large value.                     |
+| time_partitioning_type                 | string        | no                          | nil                                                    | Type of bigquery time partitioning feature(experimental feature on BigQuery).                                        |
+| time_partitioning_expiration           | integer       | no                          | nil                                                    | Expiration milliseconds for bigquery time partitioning. (experimental feature on BigQuery)                           |
 
 ### Standard Options
 
@@ -76,21 +78,21 @@ Configure insert specifications with target table schema, with your credentials.
 ```apache
 <match dummy>
   @type bigquery
-  
+
   method insert    # default
-  
+
   auth_method private_key   # default
   email xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxx@developer.gserviceaccount.com
   private_key_path /home/username/.keys/00000000000000000000000000000000-privatekey.p12
   # private_key_passphrase notasecret # default
-  
+
   project yourproject_id
   dataset yourdataset_id
   table   tablename
-  
+
   time_format %s
   time_field  time
-  
+
   field_integer time,status,bytes
   field_string  rhost,vhost,path,method,protocol,agent,referer
   field_float   requesttime
@@ -103,28 +105,28 @@ For high rate inserts over streaming inserts, you should specify flush intervals
 ```apache
 <match dummy>
   @type bigquery
-  
+
   method insert    # default
-  
+
   flush_interval 1  # flush as frequent as possible
-  
+
   buffer_chunk_records_limit 300  # default rate limit for users is 100
   buffer_queue_limit 10240        # 1MB * 10240 -> 10GB!
-  
+
   num_threads 16
-  
+
   auth_method private_key   # default
   email xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxx@developer.gserviceaccount.com
   private_key_path /home/username/.keys/00000000000000000000000000000000-privatekey.p12
   # private_key_passphrase notasecret # default
-  
+
   project yourproject_id
   dataset yourdataset_id
   tables  accesslog1,accesslog2,accesslog3
-  
+
   time_format %s
   time_field  time
-  
+
   field_integer time,status,bytes
   field_string  rhost,vhost,path,method,protocol,agent,referer
   field_float   requesttime
@@ -214,10 +216,10 @@ download its JSON key and deploy the key with fluentd.
 ```apache
 <match dummy>
   @type bigquery
-  
+
   auth_method json_key
   json_key /home/username/.keys/00000000000000000000000000000000-jsonkey.json
-  
+
   project yourproject_id
   dataset yourdataset_id
   table   tablename
@@ -231,10 +233,10 @@ You need to only include `private_key` and `client_email` key from JSON key file
 ```apache
 <match dummy>
   @type bigquery
-   
+
   auth_method json_key
   json_key {"private_key": "-----BEGIN PRIVATE KEY-----\n...", "client_email": "xxx@developer.gserviceaccount.com"}
-  
+
   project yourproject_id
   dataset yourdataset_id
   table   tablename
@@ -252,16 +254,16 @@ Compute Engine instance, then you can configure fluentd like this.
 ```apache
 <match dummy>
   @type bigquery
-  
+
   auth_method compute_engine
-  
+
   project yourproject_id
   dataset yourdataset_id
   table   tablename
-  
+
   time_format %s
   time_field  time
-  
+
   field_integer time,status,bytes
   field_string  rhost,vhost,path,method,protocol,agent,referer
   field_float   requesttime
@@ -296,13 +298,13 @@ data is inserted into tables `accesslog_2014_08`, `accesslog_2014_09` and so on.
 ```apache
 <match dummy>
   @type bigquery
-  
+
   ...
-  
+
   project yourproject_id
   dataset yourdataset_id
   table   accesslog_%Y_%m
-  
+
   ...
 </match>
 ```
@@ -384,12 +386,12 @@ NOTE: `auto_create_table` option cannot be used with `fetch_schema`. You should 
 ```apache
 <match dummy>
   @type bigquery
-  
+
   ...
-  
+
   auto_create_table true
   table accesslog_%Y_%m
-  
+
   ...
 </match>
 ```
@@ -408,12 +410,12 @@ you can also specify nested fields by prefixing their belonging record fields.
 ```apache
 <match dummy>
   @type bigquery
-  
+
   ...
-  
+
   time_format %s
   time_field  time
-  
+
   field_integer time,response.status,response.bytes
   field_string  request.vhost,request.path,request.method,request.protocol,request.agent,request.referer,remote.host,remote.ip,remote.user
   field_float   request.time
@@ -447,12 +449,12 @@ The second method is to specify a path to a BigQuery schema file instead of list
 ```apache
 <match dummy>
   @type bigquery
-  
+
   ...
-  
+
   time_format %s
   time_field  time
-  
+
   schema_path /path/to/httpd.schema
   field_integer time
 </match>
@@ -464,12 +466,12 @@ The third method is to set `fetch_schema` to `true` to enable fetch a schema usi
 ```apache
 <match dummy>
   @type bigquery
-  
+
   ...
-  
+
   time_format %s
   time_field  time
-  
+
   fetch_schema true
   # fetch_schema_table other_table # if you want to fetch schema from other table
   field_integer time
@@ -489,9 +491,9 @@ You can set `insert_id_field` option to specify the field to use as `insertId` p
 ```apache
 <match dummy>
   @type bigquery
-  
+
   ...
-  
+
   insert_id_field uuid
   field_string uuid
 </match>
