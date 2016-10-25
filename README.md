@@ -57,8 +57,8 @@ OAuth flow for installed applications.
 | insert_id_field                        | string        | no                          | nil                                                    | Use key as `insert_id` of Streaming Insert API parameter.                                                            |
 | request_timeout_sec                    | integer       | no                          | nil                                                    | Bigquery API response timeout                                                                                        |
 | request_open_timeout_sec               | integer       | no                          | 60                                                     | Bigquery API connection, and request timeout. If you send big data to Bigquery, set large value.                     |
-| time_partitioning_type                 | string        | no                          | nil                                                    | Type of bigquery time partitioning feature(experimental feature on BigQuery).                                        |
-| time_partitioning_expiration           | integer       | no                          | nil                                                    | Expiration milliseconds for bigquery time partitioning. (experimental feature on BigQuery)                           |
+| time_partitioning_type                 | enum          | no (either day)             | nil                                                    | Type of bigquery time partitioning feature(experimental feature on BigQuery).                                        |
+| time_partitioning_expiration           | time          | no                          | nil                                                    | Expiration milliseconds for bigquery time partitioning. (experimental feature on BigQuery)                           |
 
 ### Standard Options
 

@@ -76,7 +76,10 @@ module Fluent
           }
 
           if time_partitioning_type
-            definition[:time_partitioning] = { type: time_partitioning_type, expiration_ms: time_partitioning_expiration }.compact
+            definition[:time_partitioning] = {
+              type: time_partitioning_type.to_s.upcase,
+              expiration_ms: time_partitioning_expiration ? time_partitioning_expiration * 1000 : nil
+            }.compact
           end
           client.insert_table(project, dataset, definition, {})
           log.debug "create table", project_id: project, dataset: dataset, table: table_id

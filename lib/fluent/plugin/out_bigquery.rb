@@ -144,8 +144,8 @@ module Fluent
     config_param :request_open_timeout_sec, :time, default: 60
 
     ## Partitioning
-    config_param :time_partitioning_type, :string, default: nil
-    config_param :time_partitioning_expiration, :integer, default: nil
+    config_param :time_partitioning_type, :enum, list: [:day], default: nil
+    config_param :time_partitioning_expiration, :time, default: nil
 
     ### Table types
     # https://developers.google.com/bigquery/docs/tables
