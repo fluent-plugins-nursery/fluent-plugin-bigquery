@@ -162,10 +162,10 @@ module Fluent
               source_format: "NEWLINE_DELIMITED_JSON",
               ignore_unknown_values: ignore_unknown_values,
               max_bad_records: max_bad_records,
-              create_disposition: 'CREATE_NEVER',
             }
           }
         }
+        configuration[:configuration][:load].merge!(create_disposition: "CREATE_NEVER") if time_partitioning_type
         configuration.merge!({job_reference: {project_id: project, job_id: job_id}}) if job_id
 
         # If target table is already exist, omit schema configuration.
@@ -200,6 +200,7 @@ module Fluent
         if auto_create_table && e.status_code == 404 && /Not Found: Table/i =~ e.message
           # Table Not Found: Auto Create Table
           create_table(project, dataset, table_id, fields, time_partitioning_type: time_partitioning_type, time_partitioning_expiration: time_partitioning_expiration)
+          raise "table created. send rows next time."
         end
 
         return wait_load_job(project, dataset, job_id, table_id) if job_id && e.status_code == 409 && e.message =~ /Job/ # duplicate load job
