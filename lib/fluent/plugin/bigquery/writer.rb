@@ -60,20 +60,28 @@ module Fluent
         @client = client
       end
 
-      def create_table(project, dataset, table_id, record_schema)
+      def create_table(project, dataset, table_id, record_schema, time_partitioning_type: nil, time_partitioning_expiration: nil)
         create_table_retry_limit = 3
         create_table_retry_wait = 1
         create_table_retry_count = 0
 
         begin
-          client.insert_table(project, dataset, {
+          definition = {
             table_reference: {
               table_id: table_id,
             },
             schema: {
               fields: record_schema.to_a,
             }
-          }, {})
+          }
+
+          if time_partitioning_type
+            definition[:time_partitioning] = {
+              type: time_partitioning_type.to_s.upcase,
+              expiration_ms: time_partitioning_expiration ? time_partitioning_expiration * 1000 : nil
+            }.compact
+          end
+          client.insert_table(project, dataset, definition, {})
           log.debug "create table", project_id: project, dataset: dataset, table: table_id
           @client = nil
         rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
@@ -138,7 +146,7 @@ module Fluent
         end
       end
 
-      def create_load_job(project, dataset, table_id, upload_source, job_id, fields, ignore_unknown_values: false, max_bad_records: 0, timeout_sec: nil, open_timeout_sec: 60)
+      def create_load_job(project, dataset, table_id, upload_source, job_id, fields, ignore_unknown_values: false, max_bad_records: 0, timeout_sec: nil, open_timeout_sec: 60, auto_create_table: nil, time_partitioning_type: nil, time_partitioning_expiration: nil)
         configuration = {
           configuration: {
             load: {
@@ -154,6 +162,7 @@ module Fluent
               source_format: "NEWLINE_DELIMITED_JSON",
               ignore_unknown_values: ignore_unknown_values,
               max_bad_records: max_bad_records,
+              create_disposition: 'CREATE_NEVER',
             }
           }
         }
@@ -188,7 +197,12 @@ module Fluent
         reason = e.respond_to?(:reason) ? e.reason : nil
         log.error "job.load API", project_id: project, dataset: dataset, table: table_id, code: e.status_code, message: e.message, reason: reason
 
-        return wait_load_job(project, dataset, job_id, table_id, retryable: false) if job_id && e.status_code == 409 && e.message =~ /Job/ # duplicate load job
+        if auto_create_table && e.status_code == 404 && /Not Found: Table/i =~ e.message
+          # Table Not Found: Auto Create Table
+          create_table(project, dataset, table_id, fields, time_partitioning_type: time_partitioning_type, time_partitioning_expiration: time_partitioning_expiration)
+        end
+
+        return wait_load_job(project, dataset, job_id, table_id) if job_id && e.status_code == 409 && e.message =~ /Job/ # duplicate load job
 
         if RETRYABLE_ERROR_REASON.include?(reason) || e.is_a?(Google::Apis::ServerError)
           raise RetryableError.new(nil, e)
