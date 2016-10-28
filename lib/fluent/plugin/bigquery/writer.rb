@@ -132,7 +132,7 @@ module Fluent
           options: {timeout_sec: timeout_sec, open_timeout_sec: open_timeout_sec}
         })
         log.debug "insert rows", project_id: project, dataset: dataset, table: table_id, count: rows.size
-        log.warn "insert errors", insert_errors: res.insert_errors if res.insert_errors && !res.insert_errors.empty?
+        log.warn "insert errors", insert_errors: res.insert_errors.to_s if res.insert_errors && !res.insert_errors.empty?
       rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
         @client = nil
 
