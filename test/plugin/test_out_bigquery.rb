@@ -1034,7 +1034,6 @@ class BigQueryOutputTest < Test::Unit::TestCase
           source_format: "NEWLINE_DELIMITED_JSON",
           ignore_unknown_values: false,
           max_bad_records: 0,
-          create_disposition: 'CREATE_NEVER'
         }
       }
     }, {upload_source: io, content_type: "application/octet-stream", options: {timeout_sec: nil, open_timeout_sec: 60}}) do
@@ -1100,7 +1099,6 @@ class BigQueryOutputTest < Test::Unit::TestCase
           source_format: "NEWLINE_DELIMITED_JSON",
           ignore_unknown_values: false,
           max_bad_records: 0,
-          create_disposition: 'CREATE_NEVER'
         },
       },
       job_reference: {project_id: 'yourproject_id', job_id: satisfy { |x| x =~ /fluentd_job_.*/}} ,
@@ -1164,7 +1162,6 @@ class BigQueryOutputTest < Test::Unit::TestCase
           source_format: "NEWLINE_DELIMITED_JSON",
           ignore_unknown_values: false,
           max_bad_records: 0,
-          create_disposition: 'CREATE_NEVER'
         }
       }
     }, {upload_source: io, content_type: "application/octet-stream", options: {timeout_sec: nil, open_timeout_sec: 60}}) do
@@ -1248,7 +1245,6 @@ class BigQueryOutputTest < Test::Unit::TestCase
           source_format: "NEWLINE_DELIMITED_JSON",
           ignore_unknown_values: false,
           max_bad_records: 0,
-          create_disposition: 'CREATE_NEVER'
         }
       }
     }, {upload_source: io, content_type: "application/octet-stream", options: {timeout_sec: nil, open_timeout_sec: 60}}) do
