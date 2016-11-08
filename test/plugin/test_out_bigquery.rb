@@ -145,7 +145,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
   end
 
   def test_configure_auth_json_key_as_string
-    json_key = '{"private_key": "X", "client_email": "xxx@developer.gserviceaccount.com"}'
+    json_key = '{"private_key": "X", "client_email": "' + 'x' * 255 + '@developer.gserviceaccount.com"}'
     json_key_io = StringIO.new(json_key)
     mock(StringIO).new(json_key) { json_key_io }
     authorization = Object.new

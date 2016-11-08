@@ -287,12 +287,14 @@ module Fluent
         json_key = @auth_options[:json_key]
 
         begin
+          JSON.parse(json_key)
+          key = StringIO.new(json_key)
+          Google::Auth::ServiceAccountCredentials.make_creds(json_key_io: key, scope: @scope)
+        rescue JSON::ParserError
+          key = json_key
           File.open(json_key) do |f|
             Google::Auth::ServiceAccountCredentials.make_creds(json_key_io: f, scope: @scope)
           end
-        rescue Errno::ENOENT
-          key = StringIO.new(json_key)
-          Google::Auth::ServiceAccountCredentials.make_creds(json_key_io: key, scope: @scope)
         end
       end
 
