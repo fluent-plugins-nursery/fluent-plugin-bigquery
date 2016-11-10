@@ -139,7 +139,7 @@ module Fluent
         reason = e.respond_to?(:reason) ? e.reason : nil
         log.error "tabledata.insertAll API", project_id: project, dataset: dataset, table: table_id, code: e.status_code, message: e.message, reason: reason
 
-        if RETRYABLE_ERROR_REASON.include?(reason)
+        if RETRYABLE_ERROR_REASON.include?(reason) || (e.is_a?(Google::Apis::ServerError) && [500, 503].include?(e.status_code))
           raise RetryableError.new(nil, e)
         else
           raise UnRetryableError.new(nil, e)
