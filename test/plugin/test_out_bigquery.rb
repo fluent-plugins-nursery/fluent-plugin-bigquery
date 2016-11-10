@@ -923,10 +923,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       skip_invalid_rows: false,
       ignore_unknown_values: false
     }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) do
-      ex = Google::Apis::ServerError.new("error")
-      def ex.reason
-        "backendError"
-      end
+      ex = Google::Apis::ServerError.new("error", status_code: 500)
       raise ex
     end
 
@@ -971,7 +968,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       skip_invalid_rows: false,
       ignore_unknown_values: false
     }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) do
-      ex = Google::Apis::ServerError.new("error")
+      ex = Google::Apis::ServerError.new("error", status_code: 501)
       def ex.reason
         "invalid"
       end
