@@ -933,7 +933,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
     end
 
     driver.instance.start
-    assert_raise Fluent::BigQuery::Writer::RetryableError do
+    assert_raise Fluent::BigQuery::RetryableError do
       driver.instance.write(chunk)
     end
     driver.instance.shutdown
@@ -1188,7 +1188,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
     end
 
     driver.instance.start
-    assert_raise Fluent::BigQuery::Writer::RetryableError do
+    assert_raise Fluent::BigQuery::RetryableError do
       driver.instance.write(chunk)
     end
     driver.instance.shutdown
@@ -1424,7 +1424,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
     mock(writer).insert_rows('yourproject_id', 'yourdataset_id', 'foo', [message], hash_including(
       skip_invalid_rows: false,
       ignore_unknown_values: false,
-    )) { raise Fluent::BigQuery::Writer::RetryableError.new(nil, Google::Apis::ServerError.new("Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404, body: "Not found: Table yourproject_id:yourdataset_id.foo")) }
+    )) { raise Fluent::BigQuery::RetryableError.new(nil, Google::Apis::ServerError.new("Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404, body: "Not found: Table yourproject_id:yourdataset_id.foo")) }
     mock(writer).create_table('yourproject_id', 'yourdataset_id', 'foo', driver.instance.instance_variable_get(:@fields), time_partitioning_type: nil, time_partitioning_expiration: nil)
 
     chunk = Fluent::MemoryBufferChunk.new("my.tag")
@@ -1486,7 +1486,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
     mock(writer).insert_rows('yourproject_id', 'yourdataset_id', 'foo', [message], hash_including(
       skip_invalid_rows: false,
       ignore_unknown_values: false,
-    )) { raise Fluent::BigQuery::Writer::RetryableError.new(nil, Google::Apis::ServerError.new("Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404, body: "Not found: Table yourproject_id:yourdataset_id.foo")) }
+    )) { raise Fluent::BigQuery::RetryableError.new(nil, Google::Apis::ServerError.new("Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404, body: "Not found: Table yourproject_id:yourdataset_id.foo")) }
     mock(writer).create_table('yourproject_id', 'yourdataset_id', 'foo', driver.instance.instance_variable_get(:@fields), time_partitioning_type: :day, time_partitioning_expiration: 3600)
 
     chunk = Fluent::MemoryBufferChunk.new("my.tag")

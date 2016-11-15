@@ -5,6 +5,7 @@ require 'fluent/plugin/bigquery/version'
 require 'fluent/mixin/config_placeholders'
 require 'fluent/mixin/plaintextformatter'
 
+require 'fluent/plugin/bigquery/errors'
 require 'fluent/plugin/bigquery/schema'
 require 'fluent/plugin/bigquery/writer'
 
@@ -12,10 +13,6 @@ require 'fluent/plugin/bigquery/writer'
 # require 'fluent/plugin/bigquery/load_request_body_wrapper'
 
 module Fluent
-  ### TODO: error classes for each api error responses
-  # class BigQueryAPIError < StandardError
-  # end
-
   class BigQueryOutput < TimeSlicedOutput
     Fluent::Plugin.register_output('bigquery', self)
 
@@ -414,7 +411,7 @@ module Fluent
 
       def insert(table_id, rows, template_suffix)
         writer.insert_rows(@project, @dataset, table_id, rows, skip_invalid_rows: @skip_invalid_rows, ignore_unknown_values: @ignore_unknown_values, template_suffix: template_suffix)
-      rescue Fluent::BigQuery::Writer::Error => e
+      rescue Fluent::BigQuery::Error => e
         if @auto_create_table && e.status_code == 404 && /Not Found: Table/i =~ e.message
           # Table Not Found: Auto Create Table
           writer.create_table(@project, @dataset, table_id, @fields, time_partitioning_type: @time_partitioning_type, time_partitioning_expiration: @time_partitioning_expiration)
@@ -467,7 +464,7 @@ module Fluent
             time_partitioning_type: @time_partitioning_type, time_partitioning_expiration: @time_partitioning_expiration
           })
         end
-      rescue Fluent::BigQuery::Writer::Error => e
+      rescue Fluent::BigQuery::Error => e
         if e.retryable?
           raise e
         elsif @secondary
