@@ -434,6 +434,10 @@ module Fluent
           record = replace_record_key(record)
         end
 
+        if @convert_hash_to_json
+          record = convert_hash_to_json(record)
+        end
+
         buf = String.new
         row = @fields.format(@add_time_field.call(record, time))
         unless row.empty?
