@@ -4,7 +4,18 @@ rvm:
   - 2.0
   - 2.1
   - 2.2
-  - 2.3.0
+  - 2.3.3
+
+gemfile:
+  - Gemfile
+  - gemfiles/activesupport-4.gemfile
+
+matrix:
+  exclude:
+    - rvm: 2.0
+      gemfile: Gemfile
+    - rvm: 2.1
+      gemfile: Gemfile
 
 before_install:
   - gem update bundler
