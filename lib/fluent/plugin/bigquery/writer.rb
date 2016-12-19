@@ -25,6 +25,7 @@ module Fluent
         create_table_retry_limit = 3
         create_table_retry_wait = 1
         create_table_retry_count = 0
+        table_id = safe_table_id(table_id)
 
         begin
           definition = {
@@ -253,6 +254,10 @@ module Fluent
 
       def get_auth_from_application_default
         Google::Auth.get_application_default([@scope])
+      end
+
+      def safe_table_id(table_id)
+        table_id.gsub(/\$\d+$/, "")
       end
     end
   end
