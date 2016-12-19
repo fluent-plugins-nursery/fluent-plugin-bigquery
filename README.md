@@ -14,6 +14,9 @@
 Current version of this plugin supports Google API with Service Account Authentication, but does not support
 OAuth flow for installed applications.
 
+## Notice
+If you use ruby-2.1 or earlier, you must use activesupport-4.2.x or earlier.
+
 ## Configuration
 
 ### Options
