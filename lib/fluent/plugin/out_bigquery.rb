@@ -259,6 +259,8 @@ module Fluent
       else
         @get_insert_id = nil
       end
+
+      Faraday.default_adapter = :httpclient
     end
 
     def start
