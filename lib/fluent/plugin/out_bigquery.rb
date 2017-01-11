@@ -267,7 +267,6 @@ module Fluent
       @tables_queue = @tablelist.dup.shuffle
       @tables_mutex = Mutex.new
       @fetch_schema_mutex = Mutex.new
-      @num_errors_per_chunk = {}
 
       @last_fetch_schema_time = 0
       fetch_schema(false) if @fetch_schema
@@ -456,24 +455,16 @@ module Fluent
       def load(chunk, table_id)
         res = nil
 
-        if @prevent_duplicate_load
-          job_id = create_job_id(chunk, @dataset, table_id, @fields.to_a, @max_bad_records, @ignore_unknown_values)
-        else
-          job_id = nil
-        end
-
         create_upload_source(chunk) do |upload_source|
-          res = writer.create_load_job(@project, @dataset, table_id, upload_source, job_id, @fields, {
+          res = writer.create_load_job(chunk.unique_id, @project, @dataset, table_id, upload_source, @fields, {
+            prevent_duplicate_load: @prevent_duplicate_load,
             ignore_unknown_values: @ignore_unknown_values, max_bad_records: @max_bad_records,
             timeout_sec: @request_timeout_sec,  open_timeout_sec: @request_open_timeout_sec, auto_create_table: @auto_create_table,
             time_partitioning_type: @time_partitioning_type, time_partitioning_expiration: @time_partitioning_expiration
           })
-          @num_errors_per_chunk.delete(chunk.unique_id)
         end
       rescue Fluent::BigQuery::Error => e
         if e.retryable?
-          @num_errors_per_chunk[chunk.unique_id] ||= 0
-          @num_errors_per_chunk[chunk.unique_id] += 1
           raise e
         elsif @secondary
           flush_secondary(@secondary)
@@ -497,12 +488,6 @@ module Fluent
             yield file
           end
         end
-      end
-
-      def create_job_id(chunk, dataset, table, schema, max_bad_records, ignore_unknown_values)
-        job_id_key = "#{chunk.unique_id}#{dataset}#{table}#{schema.to_s}#{max_bad_records}#{ignore_unknown_values}#{@num_errors_per_chunk[chunk.unique_id]}"
-        @log.debug "job_id_key: #{job_id_key}"
-        "fluentd_job_" + Digest::SHA1.hexdigest(job_id_key)
       end
     end
   end
