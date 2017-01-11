@@ -462,7 +462,7 @@ The second method is to specify a path to a BigQuery schema file instead of list
   field_integer time
 </match>
 ```
-where /path/to/httpd.schema is a path to the JSON-encoded schema file which you used for creating the table on BigQuery.
+where /path/to/httpd.schema is a path to the JSON-encoded schema file which you used for creating the table on BigQuery. By using external schema file you are able to write full schema that does support NULLABLE/REQUIRED/REPEATED, this feature is really useful and adds full flexbility.
 
 The third method is to set `fetch_schema` to `true` to enable fetch a schema using BigQuery API.  In this case, your fluent.conf looks like:
 
