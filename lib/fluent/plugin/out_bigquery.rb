@@ -455,14 +455,9 @@ module Fluent
       def load(chunk, table_id)
         res = nil
 
-        if @prevent_duplicate_load
-          job_id = create_job_id(chunk, @dataset, table_id, @fields.to_a, @max_bad_records, @ignore_unknown_values)
-        else
-          job_id = nil
-        end
-
         create_upload_source(chunk) do |upload_source|
-          res = writer.create_load_job(@project, @dataset, table_id, upload_source, job_id, @fields, {
+          res = writer.create_load_job(chunk.unique_id, @project, @dataset, table_id, upload_source, @fields, {
+            prevent_duplicate_load: @prevent_duplicate_load,
             ignore_unknown_values: @ignore_unknown_values, max_bad_records: @max_bad_records,
             timeout_sec: @request_timeout_sec,  open_timeout_sec: @request_open_timeout_sec, auto_create_table: @auto_create_table,
             time_partitioning_type: @time_partitioning_type, time_partitioning_expiration: @time_partitioning_expiration
@@ -493,10 +488,6 @@ module Fluent
             yield file
           end
         end
-      end
-
-      def create_job_id(chunk, dataset, table, schema, max_bad_records, ignore_unknown_values)
-        "fluentd_job_" + Digest::SHA1.hexdigest("#{chunk.unique_id}#{dataset}#{table}#{schema.to_s}#{max_bad_records}#{ignore_unknown_values}")
       end
     end
   end
