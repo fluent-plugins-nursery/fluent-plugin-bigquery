@@ -267,6 +267,7 @@ module Fluent
       @tables_queue = @tablelist.dup.shuffle
       @tables_mutex = Mutex.new
       @fetch_schema_mutex = Mutex.new
+      @num_errors_per_chunk = {}
 
       @last_fetch_schema_time = 0
       fetch_schema(false) if @fetch_schema
@@ -467,9 +468,12 @@ module Fluent
             timeout_sec: @request_timeout_sec,  open_timeout_sec: @request_open_timeout_sec, auto_create_table: @auto_create_table,
             time_partitioning_type: @time_partitioning_type, time_partitioning_expiration: @time_partitioning_expiration
           })
+          @num_errors_per_chunk.delete(chunk.unique_id)
         end
       rescue Fluent::BigQuery::Error => e
         if e.retryable?
+          @num_errors_per_chunk[chunk.unique_id] ||= 0
+          @num_errors_per_chunk[chunk.unique_id] += 1
           raise e
         elsif @secondary
           flush_secondary(@secondary)
@@ -496,7 +500,9 @@ module Fluent
       end
 
       def create_job_id(chunk, dataset, table, schema, max_bad_records, ignore_unknown_values)
-        "fluentd_job_" + Digest::SHA1.hexdigest("#{chunk.unique_id}#{dataset}#{table}#{schema.to_s}#{max_bad_records}#{ignore_unknown_values}")
+        job_id_key = "#{chunk.unique_id}#{dataset}#{table}#{schema.to_s}#{max_bad_records}#{ignore_unknown_values}#{@num_errors_per_chunk[chunk.unique_id]}"
+        @log.debug "job_id_key: #{job_id_key}"
+        "fluentd_job_" + Digest::SHA1.hexdigest(job_id_key)
       end
     end
   end
