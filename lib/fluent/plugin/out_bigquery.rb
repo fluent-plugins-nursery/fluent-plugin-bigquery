@@ -259,6 +259,8 @@ module Fluent
       else
         @get_insert_id = nil
       end
+
+      warn "[DEPRECATION] `convert_hash_to_json` param is deprecated. If Hash value is inserted string field, plugin convert it to json automatically." if @convert_hash_to_json
     end
 
     def start

@@ -1,3 +1,5 @@
+require 'multi_json'
+
 module Fluent
   module BigQuery
     class FieldSchema
@@ -56,7 +58,11 @@ module Fluent
       end
 
       def format_one(value)
-        value.to_s
+        if value.is_a?(Hash) || value.is_a?(Array)
+          MultiJson.dump(value)
+        else
+          value.to_s
+        end
       end
     end
 
