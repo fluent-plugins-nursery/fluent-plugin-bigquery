@@ -87,6 +87,7 @@ module Fluent
     #   Default is false, which treats unknown values as errors.
     config_param :ignore_unknown_values, :bool, default: false
 
+    config_param :schema, :array, default: nil
     config_param :schema_path, :string, default: nil
     config_param :fetch_schema, :bool, default: false
     config_param :fetch_schema_table, :string, default: nil
@@ -213,7 +214,11 @@ module Fluent
 
       @tablelist = @tables ? @tables.split(',') : [@table]
 
+      legacy_schema_config_deprecation
       @fields = Fluent::BigQuery::RecordSchema.new('record')
+      if @schema
+        @fields.load_schema(@schema)
+      end
       if @schema_path
         @fields.load_schema(MultiJson.load(File.read(@schema_path)))
       end
@@ -329,6 +334,12 @@ module Fluent
         end
       end
       record
+    end
+
+    def legacy_schema_config_deprecation
+      if [@field_string, @field_integer, @field_float, @field_boolean, @field_timestamp].any?
+        warn "[DEPRECATION] `field_*` style schema config is deprecated. Instead of it, use `schema` config params that is array of json style."
+      end
     end
 
     def write(chunk)
