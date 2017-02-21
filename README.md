@@ -17,6 +17,13 @@ OAuth flow for installed applications.
 ## Notice
 If you use ruby-2.1 or earlier, you must use activesupport-4.2.x or earlier.
 
+## With docker image
+If you use official alpine based fluentd docker image (https://github.com/fluent/fluentd-docker-image),
+You need to install `bigdecimal` gem on your own dockerfile.
+Because alpine based image has only minimal ruby environment in order to reduce image size.
+And in most case, dependency to embedded gem is not written on gemspec.
+Because embbeded gem dependency sometimes restricts ruby environment.
+
 ## Configuration
 
 ### Options
