@@ -121,6 +121,10 @@ module Fluent
 
     config_param :method, :enum, list: [:insert, :load], default: :insert, skip_accessor: true
 
+    # allow_retry_insert_errors (only insert)
+    # If insert_id_field is not specified, true means to allow duplicate rows
+    config_param :allow_retry_insert_errors, :bool, default: false
+
     # TODO
     # config_param :row_size_limit, :integer, default: 100*1000 # < 100KB # configurable in google ?
     # config_param :insert_size_limit, :integer, default: 1000**2 # < 1MB
@@ -423,7 +427,7 @@ module Fluent
       end
 
       def insert(table_id, rows, template_suffix)
-        writer.insert_rows(@project, @dataset, table_id, rows, skip_invalid_rows: @skip_invalid_rows, ignore_unknown_values: @ignore_unknown_values, template_suffix: template_suffix)
+        writer.insert_rows(@project, @dataset, table_id, rows, skip_invalid_rows: @skip_invalid_rows, ignore_unknown_values: @ignore_unknown_values, template_suffix: template_suffix, allow_retry_insert_errors: @allow_retry_insert_errors)
       rescue Fluent::BigQuery::Error => e
         if @auto_create_table && e.status_code == 404 && /Not Found: Table/i =~ e.message
           # Table Not Found: Auto Create Table
