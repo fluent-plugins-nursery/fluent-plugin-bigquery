@@ -17,10 +17,25 @@ class BigQueryOutputTest < Test::Unit::TestCase
     time_key  time
     </inject>
 
-    field_integer time,status,bytes
-    field_string  vhost,path,method,protocol,agent,referer,remote.host,remote.ip,remote.user
-    field_float   requesttime
-    field_boolean bot_access,loginsession
+    schema [
+      {"name": "time", "type": "INTEGER"},
+      {"name": "status", "type": "INTEGER"},
+      {"name": "bytes", "type": "INTEGER"},
+      {"name": "vhost", "type": "STRING"},
+      {"name": "path", "type": "STRING"},
+      {"name": "method", "type": "STRING"},
+      {"name": "protocol", "type": "STRING"},
+      {"name": "agent", "type": "STRING"},
+      {"name": "referer", "type": "STRING"},
+      {"name": "remote", "type": "RECORD", "fields": [
+        {"name": "host", "type": "STRING"},
+        {"name": "ip", "type": "STRING"},
+        {"name": "user", "type": "STRING"}
+      ]},
+      {"name": "requesttime", "type": "FLOAT"},
+      {"name": "bot_access", "type": "BOOLEAN"},
+      {"name": "loginsession", "type": "BOOLEAN"}
+    ]
   ]
 
   API_SCOPE = "https://www.googleapis.com/auth/bigquery"
@@ -86,7 +101,11 @@ class BigQueryOutputTest < Test::Unit::TestCase
       auth_method compute_engine
       project yourproject_id
       dataset yourdataset_id
-      field_integer time,status,bytes
+      schema [
+        {"name": "time", "type": "INTEGER"},
+        {"name": "status", "type": "INTEGER"},
+        {"name": "bytes", "type": "INTEGER"}
+      ]
     ])
     mock.proxy(Fluent::BigQuery::Writer).new(duck_type(:info, :error, :warn), driver.instance.auth_method, is_a(Hash))
     driver.instance.writer
@@ -109,7 +128,11 @@ class BigQueryOutputTest < Test::Unit::TestCase
       json_key #{json_key_path}
       project yourproject_id
       dataset yourdataset_id
-      field_integer time,status,bytes
+      schema [
+        {"name": "time", "type": "INTEGER"},
+        {"name": "status", "type": "INTEGER"},
+        {"name": "bytes", "type": "INTEGER"}
+      ]
     ])
     mock.proxy(Fluent::BigQuery::Writer).new(duck_type(:info, :error, :warn), driver.instance.auth_method, is_a(Hash))
     driver.instance.writer
@@ -129,7 +152,11 @@ class BigQueryOutputTest < Test::Unit::TestCase
         json_key #{json_key_path}
         project yourproject_id
         dataset yourdataset_id
-        field_integer time,status,bytes
+        schema [
+          {"name": "time", "type": "INTEGER"},
+          {"name": "status", "type": "INTEGER"},
+          {"name": "bytes", "type": "INTEGER"}
+        ]
       ])
       assert_raises(Errno::EACCES) do
         driver.instance.writer.client
@@ -141,11 +168,9 @@ class BigQueryOutputTest < Test::Unit::TestCase
 
   def test_configure_auth_json_key_as_string
     json_key = '{"private_key": "X", "client_email": "' + 'x' * 255 + '@developer.gserviceaccount.com"}'
-    parsed_json_key = MultiJson.load(json_key)
     json_key_io = StringIO.new(json_key)
-    mock(StringIO).new(satisfy { |arg| MultiJson.load(arg) == parsed_json_key } ) { json_key_io }
     authorization = Object.new
-    mock(Google::Auth::ServiceAccountCredentials).make_creds(json_key_io: json_key_io, scope: API_SCOPE) { authorization }
+    mock(Google::Auth::ServiceAccountCredentials).make_creds(json_key_io: satisfy {|arg| JSON.parse(arg.read) == JSON.parse(json_key_io.read) }, scope: API_SCOPE) { authorization }
 
     mock.proxy(Google::Apis::BigqueryV2::BigqueryService).new.with_any_args do |cl|
       mock(cl).__send__(:authorization=, authorization) {}
@@ -158,7 +183,11 @@ class BigQueryOutputTest < Test::Unit::TestCase
       json_key #{json_key}
       project yourproject_id
       dataset yourdataset_id
-      field_integer time,status,bytes
+      schema [
+        {"name": "time", "type": "INTEGER"},
+        {"name": "status", "type": "INTEGER"},
+        {"name": "bytes", "type": "INTEGER"}
+      ]
     ])
     mock.proxy(Fluent::BigQuery::Writer).new(duck_type(:info, :error, :warn), driver.instance.auth_method, is_a(Hash))
     driver.instance.writer
@@ -179,86 +208,16 @@ class BigQueryOutputTest < Test::Unit::TestCase
       auth_method application_default
       project yourproject_id
       dataset yourdataset_id
-      field_integer time,status,bytes
+      schema [
+        {"name": "time", "type": "INTEGER"},
+        {"name": "status", "type": "INTEGER"},
+        {"name": "bytes", "type": "INTEGER"}
+      ]
     ])
 
     mock.proxy(Fluent::BigQuery::Writer).new(duck_type(:info, :error, :warn), driver.instance.auth_method, is_a(Hash))
     driver.instance.writer
     assert driver.instance.writer.client.is_a?(Google::Apis::BigqueryV2::BigqueryService)
-  end
-
-  def test_configure_fieldname_stripped
-    driver = create_driver(%[
-      table foo
-      email foo@bar.example
-      private_key_path /path/to/key
-      project yourproject_id
-      dataset yourdataset_id
-
-      <inject>
-      time_format %s
-      time_key  time
-      </inject>
-
-      field_integer time  , status , bytes
-      field_string  _log_name, vhost, path, method, protocol, agent, referer, remote.host, remote.ip, remote.user
-      field_float   requesttime
-      field_boolean bot_access , loginsession
-    ])
-    fields = driver.instance.instance_eval{ @fields }
-
-    assert (not fields['time  ']), "tailing spaces must be stripped"
-    assert fields['time']
-    assert fields['status']
-    assert fields['bytes']
-    assert fields['_log_name']
-    assert fields['vhost']
-    assert fields['protocol']
-    assert fields['agent']
-    assert fields['referer']
-    assert fields['remote']['host']
-    assert fields['remote']['ip']
-    assert fields['remote']['user']
-    assert fields['requesttime']
-    assert fields['bot_access']
-    assert fields['loginsession']
-  end
-
-  def test_configure_invalid_fieldname
-    base = %[
-      table foo
-      email foo@bar.example
-      private_key_path /path/to/key
-      project yourproject_id
-      dataset yourdataset_id
-
-      <inject>
-      time_format %s
-      time_key  time
-      </inject>
-    ]
-
-    assert_raises(Fluent::ConfigError) do
-      create_driver(base + "field_integer time field\n")
-    end
-    assert_raises(Fluent::ConfigError) do
-      create_driver(base + "field_string my name\n")
-    end
-    assert_raises(Fluent::ConfigError) do
-      create_driver(base + "field_string remote.host name\n")
-    end
-    assert_raises(Fluent::ConfigError) do
-      create_driver(base + "field_string 1column\n")
-    end
-    assert_raises(Fluent::ConfigError) do
-      create_driver(base + "field_string #{'tenstrings' * 12 + '123456789'}\n")
-    end
-    assert_raises(Fluent::ConfigError) do
-      create_driver(base + "field_float request time\n")
-    end
-    assert_raises(Fluent::ConfigError) do
-      create_driver(base + "field_boolean login session\n")
-    end
   end
 
   def test_format
@@ -353,6 +312,14 @@ class BigQueryOutputTest < Test::Unit::TestCase
         time_key  time
         </inject>
         #{type}     time
+
+        schema [
+          {"name": "metadata", "type": "RECORD", "fields": [
+            {"name": "time", "type": "INTEGER"},
+            {"name": "node", "type": "STRING"}
+          ]},
+          {"name": "log", "type": "STRING"}
+        ]
       CONFIG
 
       buf = nil
@@ -435,7 +402,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       </inject>
 
       schema_path #{File.join(File.dirname(__FILE__), "testdata", "apache.schema")}
-      field_integer time
+      schema [{"name": "time", "type": "INTEGER"}]
     CONFIG
 
     buf = nil
@@ -472,7 +439,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       </inject>
 
       schema_path #{File.join(File.dirname(__FILE__), "testdata", "sudo.schema")}
-      field_integer time
+      schema [{"name": "time", "type": "INTEGER"}]
     CONFIG
 
     buf = nil
@@ -509,7 +476,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       </inject>
 
       fetch_schema true
-      field_integer time
+      schema [{"name": "time", "type": "INTEGER"}]
     CONFIG
 
     writer = stub_writer(driver)
@@ -572,8 +539,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       </inject>
 
       fetch_schema true
-      fetch_schema_table foo
-      field_integer time
+      schema [{"name": "time", "type": "INTEGER"}]
     CONFIG
 
     writer = stub_writer(driver)
@@ -628,7 +594,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       dataset yourdataset_id
 
       insert_id_field uuid
-      field_string uuid
+      schema [{"name": "uuid", "type": "STRING"}]
     CONFIG
     mock(driver.instance).insert("foo", [expected], nil)
 
@@ -638,7 +604,6 @@ class BigQueryOutputTest < Test::Unit::TestCase
   end
 
   def test__write_with_nested_insert_id
-    now = Time.now.to_i
     input = {
       "data" => {
         "uuid" => "809F6BA7-1C16-44CD-9816-4B20E2C7AA2A",
@@ -661,7 +626,9 @@ class BigQueryOutputTest < Test::Unit::TestCase
       dataset yourdataset_id
 
       insert_id_field data.uuid
-      field_string data.uuid
+      schema [{"name": "data", "type": "RECORD", "fields": [
+        {"name": "uuid", "type": "STRING"}
+      ]}]
     CONFIG
 
     mock(driver.instance).insert("foo", [expected], nil)
@@ -702,9 +669,13 @@ class BigQueryOutputTest < Test::Unit::TestCase
       time_key time
       </inject>
 
-      field_integer time
-      field_string vhost, referer
-      field_boolean bot_access, login_session
+      schema [
+        {"name": "time", "type": "INTEGER"},
+        {"name": "vhost", "type": "STRING"},
+        {"name": "refere", "type": "STRING"},
+        {"name": "bot_access", "type": "BOOLEAN"},
+        {"name": "login_session", "type": "BOOLEAN"}
+      ]
     CONFIG
 
     buf = nil
@@ -750,9 +721,13 @@ class BigQueryOutputTest < Test::Unit::TestCase
       time_key time
       </inject>
 
-      field_integer time
-      field_string vhost, referer, remote
-      field_boolean bot_access, loginsession
+      schema [
+        {"name": "time", "type": "INTEGER"},
+        {"name": "vhost", "type": "STRING"},
+        {"name": "refere", "type": "STRING"},
+        {"name": "bot_access", "type": "BOOLEAN"},
+        {"name": "loginsession", "type": "BOOLEAN"}
+      ]
     CONFIG
 
     buf = nil
@@ -798,10 +773,25 @@ class BigQueryOutputTest < Test::Unit::TestCase
       time_key  time
       </inject>
 
-      field_integer time,status,bytes
-      field_string  vhost,path,method,protocol,agent,referer,remote.host,remote.ip,remote.user
-      field_float   requesttime
-      field_boolean bot_access,loginsession
+      schema [
+        {"name": "time", "type": "INTEGER"},
+        {"name": "status", "type": "INTEGER"},
+        {"name": "bytes", "type": "INTEGER"},
+        {"name": "vhost", "type": "STRING"},
+        {"name": "path", "type": "STRING"},
+        {"name": "method", "type": "STRING"},
+        {"name": "protocol", "type": "STRING"},
+        {"name": "agent", "type": "STRING"},
+        {"name": "referer", "type": "STRING"},
+        {"name": "remote", "type": "RECORD", "fields": [
+          {"name": "host", "type": "STRING"},
+          {"name": "ip", "type": "STRING"},
+          {"name": "user", "type": "STRING"}
+        ]},
+        {"name": "requesttime", "type": "FLOAT"},
+        {"name": "bot_access", "type": "BOOLEAN"},
+        {"name": "loginsession", "type": "BOOLEAN"}
+      ]
       <secondary>
         type file
         path error
@@ -844,10 +834,25 @@ class BigQueryOutputTest < Test::Unit::TestCase
       time_key  time
       </inject>
 
-      field_integer time,status,bytes
-      field_string  vhost,path,method,protocol,agent,referer,remote.host,remote.ip,remote.user
-      field_float   requesttime
-      field_boolean bot_access,loginsession
+      schema [
+        {"name": "time", "type": "INTEGER"},
+        {"name": "status", "type": "INTEGER"},
+        {"name": "bytes", "type": "INTEGER"},
+        {"name": "vhost", "type": "STRING"},
+        {"name": "path", "type": "STRING"},
+        {"name": "method", "type": "STRING"},
+        {"name": "protocol", "type": "STRING"},
+        {"name": "agent", "type": "STRING"},
+        {"name": "referer", "type": "STRING"},
+        {"name": "remote", "type": "RECORD", "fields": [
+          {"name": "host", "type": "STRING"},
+          {"name": "ip", "type": "STRING"},
+          {"name": "user", "type": "STRING"}
+        ]},
+        {"name": "requesttime", "type": "FLOAT"},
+        {"name": "bot_access", "type": "BOOLEAN"},
+        {"name": "loginsession", "type": "BOOLEAN"}
+      ]
       <secondary>
         type file
         path error
@@ -884,7 +889,6 @@ class BigQueryOutputTest < Test::Unit::TestCase
 
   def test_write_for_load
     schema_path = File.join(File.dirname(__FILE__), "testdata", "sudo.schema")
-    entry = {a: "b"}, {b: "c"}
     driver = create_driver(<<-CONFIG)
       method load
       table foo
@@ -899,19 +903,15 @@ class BigQueryOutputTest < Test::Unit::TestCase
       </inject>
 
       schema_path #{schema_path}
-      field_integer time
 
       buffer_type memory
     CONFIG
-    schema_fields = MultiJson.load(File.read(schema_path)).map(&:deep_symbolize_keys).tap do |h|
-      h[0][:type] = "INTEGER"
-      h[0][:mode] = "NULLABLE"
-    end
+    schema_fields = MultiJson.load(File.read(schema_path)).map(&:deep_symbolize_keys)
 
     writer = stub_writer(driver)
     io = StringIO.new("hello")
     mock(driver.instance).create_upload_source(is_a(Fluent::Plugin::Buffer::Chunk)).yields(io)
-    mock(writer).wait_load_job("yourproject_id", "yourdataset_id", "dummy_job_id", "foo") { nil }
+    mock(writer).wait_load_job(is_a(String), "yourdataset_id", "dummy_job_id", "foo") { nil }
     mock(writer.client).insert_job('yourproject_id', {
       configuration: {
         load: {
@@ -944,7 +944,6 @@ class BigQueryOutputTest < Test::Unit::TestCase
 
   def test_write_for_load_with_prevent_duplicate_load
     schema_path = File.join(File.dirname(__FILE__), "testdata", "sudo.schema")
-    entry = {a: "b"}, {b: "c"}
     driver = create_driver(<<-CONFIG)
       method load
       table foo
@@ -959,21 +958,16 @@ class BigQueryOutputTest < Test::Unit::TestCase
       </inject>
 
       schema_path #{schema_path}
-      field_integer time
       prevent_duplicate_load true
 
       buffer_type memory
     CONFIG
-    schema_fields = MultiJson.load(File.read(schema_path)).map(&:deep_symbolize_keys).tap do |h|
-      h[0][:type] = "INTEGER"
-      h[0][:mode] = "NULLABLE"
-    end
+    schema_fields = MultiJson.load(File.read(schema_path)).map(&:deep_symbolize_keys)
 
     io = StringIO.new("hello")
     mock(driver.instance).create_upload_source(is_a(Fluent::Plugin::Buffer::Chunk)).yields(io)
-    mock.proxy(driver.instance).create_job_id(duck_type(:unique_id), "yourdataset_id", "foo", driver.instance.instance_variable_get(:@fields).to_a, 0, false)
     writer = stub_writer(driver)
-    mock(writer).wait_load_job("yourproject_id", "yourdataset_id", "dummy_job_id", "foo") { nil }
+    mock(writer).wait_load_job(is_a(String), "yourproject_id", "yourdataset_id", "dummy_job_id", "foo") { nil }
     mock(writer.client).insert_job('yourproject_id', {
       configuration: {
         load: {
@@ -1007,7 +1001,6 @@ class BigQueryOutputTest < Test::Unit::TestCase
 
   def test_write_for_load_with_retryable_error
     schema_path = File.join(File.dirname(__FILE__), "testdata", "sudo.schema")
-    entry = {a: "b"}, {b: "c"}
     driver = create_driver(<<-CONFIG)
       method load
       table foo
@@ -1022,14 +1015,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
       </inject>
 
       schema_path #{schema_path}
-      field_integer time
 
       buffer_type memory
     CONFIG
-    schema_fields = MultiJson.load(File.read(schema_path)).map(&:deep_symbolize_keys).tap do |h|
-      h[0][:type] = "INTEGER"
-      h[0][:mode] = "NULLABLE"
-    end
+    schema_fields = MultiJson.load(File.read(schema_path)).map(&:deep_symbolize_keys)
 
     driver.instance_start
     tag, time, record = "tag", Time.now.to_i, {"a" => "b"}
@@ -1088,7 +1077,6 @@ class BigQueryOutputTest < Test::Unit::TestCase
 
   def test_write_for_load_with_not_retryable_error
     schema_path = File.join(File.dirname(__FILE__), "testdata", "sudo.schema")
-    entry = {a: "b"}, {b: "c"}
     driver = create_driver(<<-CONFIG)
       method load
       table foo
@@ -1103,7 +1091,6 @@ class BigQueryOutputTest < Test::Unit::TestCase
       </inject>
 
       schema_path #{schema_path}
-      field_integer time
 
       buffer_type memory
       <secondary>
@@ -1112,10 +1099,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
         utc
       </secondary>
     CONFIG
-    schema_fields = MultiJson.load(File.read(schema_path)).map(&:deep_symbolize_keys).tap do |h|
-      h[0][:type] = "INTEGER"
-      h[0][:mode] = "NULLABLE"
-    end
+    schema_fields = MultiJson.load(File.read(schema_path)).map(&:deep_symbolize_keys)
 
     driver.instance_start
     tag, time, record = "tag", Time.now.to_i, {"a" => "b"}

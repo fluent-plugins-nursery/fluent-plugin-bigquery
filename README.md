@@ -14,6 +14,16 @@
 Current version of this plugin supports Google API with Service Account Authentication, but does not support
 OAuth flow for installed applications.
 
+## Notice
+If you use ruby-2.1 or earlier, you must use activesupport-4.2.x or earlier.
+
+## With docker image
+If you use official alpine based fluentd docker image (https://github.com/fluent/fluentd-docker-image),
+You need to install `bigdecimal` gem on your own dockerfile.
+Because alpine based image has only minimal ruby environment in order to reduce image size.
+And in most case, dependency to embedded gem is not written on gemspec.
+Because embbeded gem dependency sometimes restricts ruby environment.
+
 ## Configuration
 
 ### Options
@@ -34,6 +44,7 @@ OAuth flow for installed applications.
 | skip_invalid_rows                      | bool          | no                          | false                                                  | Only `insert` method.                                                                                                |
 | max_bad_records                        | integer       | no                          | 0                                                      | Only `load` method. If the number of bad records exceeds this value, an invalid error is returned in the job result. |
 | ignore_unknown_values                  | bool          | no                          | false                                                  | Accept rows that contain values that do not match the schema. The unknown values are ignored.                        |
+| schema                                 | array         | yes (either `fetch_schema` or `schema_path`) | nil                                                    | Schema Definition. It is formatted by JSON.                                                                          |
 | schema_path                            | string        | yes (either `fetch_schema`) | nil                                                    | Schema Definition file path. It is formatted by JSON.                                                                |
 | fetch_schema                           | bool          | yes (either `schema_path`)  | false                                                  | If true, fetch table schema definition from Bigquery table automatically.                                            |
 | fetch_schema_table                     | string        | no                          | nil                                                    | If set, fetch table schema definition from this table, If fetch_schema is false, this param is ignored               |
@@ -117,11 +128,26 @@ Configure insert specifications with target table schema, with your credentials.
   project yourproject_id
   dataset yourdataset_id
   table   tablename
-  
-  field_integer time,status,bytes
-  field_string  rhost,vhost,path,method,protocol,agent,referer
-  field_float   requesttime
-  field_boolean bot_access,loginsession
+
+  schema [
+    {"name": "time", "type": "INTEGER"},
+    {"name": "status", "type": "INTEGER"},
+    {"name": "bytes", "type": "INTEGER"},
+    {"name": "vhost", "type": "STRING"},
+    {"name": "path", "type": "STRING"},
+    {"name": "method", "type": "STRING"},
+    {"name": "protocol", "type": "STRING"},
+    {"name": "agent", "type": "STRING"},
+    {"name": "referer", "type": "STRING"},
+    {"name": "remote", "type": "RECORD", "fields": [
+      {"name": "host", "type": "STRING"},
+      {"name": "ip", "type": "STRING"},
+      {"name": "user", "type": "STRING"}
+    ]},
+    {"name": "requesttime", "type": "FLOAT"},
+    {"name": "bot_access", "type": "BOOLEAN"},
+    {"name": "loginsession", "type": "BOOLEAN"}
+  ]
 </match>
 ```
 
@@ -149,11 +175,26 @@ For high rate inserts over streaming inserts, you should specify flush intervals
   project yourproject_id
   dataset yourdataset_id
   tables  accesslog1,accesslog2,accesslog3
-  
-  field_integer time,status,bytes
-  field_string  rhost,vhost,path,method,protocol,agent,referer
-  field_float   requesttime
-  field_boolean bot_access,loginsession
+
+  schema [
+    {"name": "time", "type": "INTEGER"},
+    {"name": "status", "type": "INTEGER"},
+    {"name": "bytes", "type": "INTEGER"},
+    {"name": "vhost", "type": "STRING"},
+    {"name": "path", "type": "STRING"},
+    {"name": "method", "type": "STRING"},
+    {"name": "protocol", "type": "STRING"},
+    {"name": "agent", "type": "STRING"},
+    {"name": "referer", "type": "STRING"},
+    {"name": "remote", "type": "RECORD", "fields": [
+      {"name": "host", "type": "STRING"},
+      {"name": "ip", "type": "STRING"},
+      {"name": "user", "type": "STRING"}
+    ]},
+    {"name": "requesttime", "type": "FLOAT"},
+    {"name": "bot_access", "type": "BOOLEAN"},
+    {"name": "loginsession", "type": "BOOLEAN"}
+  ]
 </match>
 ```
 
@@ -280,11 +321,8 @@ Compute Engine instance, then you can configure fluentd like this.
   project yourproject_id
   dataset yourdataset_id
   table   tablename
-  
-  field_integer time,status,bytes
-  field_string  rhost,vhost,path,method,protocol,agent,referer
-  field_float   requesttime
-  field_boolean bot_access,loginsession
+
+  ...
 </match>
 ```
 
@@ -416,11 +454,26 @@ you can also specify nested fields by prefixing their belonging record fields.
   @type bigquery
 
   ...
-  
-  field_integer time,response.status,response.bytes
-  field_string  request.vhost,request.path,request.method,request.protocol,request.agent,request.referer,remote.host,remote.ip,remote.user
-  field_float   request.time
-  field_boolean request.bot_access,request.loginsession
+
+  schema [
+    {"name": "time", "type": "INTEGER"},
+    {"name": "status", "type": "INTEGER"},
+    {"name": "bytes", "type": "INTEGER"},
+    {"name": "vhost", "type": "STRING"},
+    {"name": "path", "type": "STRING"},
+    {"name": "method", "type": "STRING"},
+    {"name": "protocol", "type": "STRING"},
+    {"name": "agent", "type": "STRING"},
+    {"name": "referer", "type": "STRING"},
+    {"name": "remote", "type": "RECORD", "fields": [
+      {"name": "host", "type": "STRING"},
+      {"name": "ip", "type": "STRING"},
+      {"name": "user", "type": "STRING"}
+    ]},
+    {"name": "requesttime", "type": "FLOAT"},
+    {"name": "bot_access", "type": "BOOLEAN"},
+    {"name": "loginsession", "type": "BOOLEAN"}
+  ]
 </match>
 ```
 
@@ -454,10 +507,9 @@ The second method is to specify a path to a BigQuery schema file instead of list
   ...
   
   schema_path /path/to/httpd.schema
-  field_integer time
 </match>
 ```
-where /path/to/httpd.schema is a path to the JSON-encoded schema file which you used for creating the table on BigQuery.
+where /path/to/httpd.schema is a path to the JSON-encoded schema file which you used for creating the table on BigQuery. By using external schema file you are able to write full schema that does support NULLABLE/REQUIRED/REPEATED, this feature is really useful and adds full flexbility.
 
 The third method is to set `fetch_schema` to `true` to enable fetch a schema using BigQuery API.  In this case, your fluent.conf looks like:
 
@@ -469,7 +521,6 @@ The third method is to set `fetch_schema` to `true` to enable fetch a schema usi
   
   fetch_schema true
   # fetch_schema_table other_table # if you want to fetch schema from other table
-  field_integer time
 </match>
 ```
 
@@ -492,17 +543,14 @@ You can set `insert_id_field` option to specify the field to use as `insertId` p
   ...
 
   insert_id_field uuid
-  field_string uuid
+  schema [{"name": "uuid", "type": "STRING"}]
 </match>
 ```
 
 ## TODO
 
-* support optional data fields
-* support NULLABLE/REQUIRED/REPEATED field options in field list style of configuration
 * OAuth installed application credentials support
 * Google API discovery expiration
-* Error classes
 * check row size limits
 
 ## Authors

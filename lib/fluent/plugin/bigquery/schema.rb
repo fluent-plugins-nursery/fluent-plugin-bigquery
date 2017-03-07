@@ -1,3 +1,5 @@
+require 'multi_json'
+
 module Fluent
   module BigQuery
     class FieldSchema
@@ -56,7 +58,11 @@ module Fluent
       end
 
       def format_one(value)
-        value.to_s
+        if value.is_a?(Hash) || value.is_a?(Array)
+          MultiJson.dump(value)
+        else
+          value.to_s
+        end
       end
     end
 
@@ -116,6 +122,48 @@ module Fluent
       end
     end
 
+    class DateFieldSchema < FieldSchema
+      def type
+        :date
+      end
+
+      def format_one(value)
+        if value.respond_to?(:strftime)
+          value.strftime("%Y-%m-%d")
+        else
+          value
+        end
+      end
+    end
+
+    class DateTimeFieldSchema < FieldSchema
+      def type
+        :datetime
+      end
+
+      def format_one(value)
+        if value.respond_to?(:strftime)
+          value.strftime("%Y-%m-%dT%H:%M:%S.%6L")
+        else
+          value
+        end
+      end
+    end
+
+    class TimeFieldSchema < FieldSchema
+      def type
+        :time
+      end
+
+      def format_one(value)
+        if value.respond_to?(:strftime)
+          value.strftime("%H:%M:%S.%6L")
+        else
+          value
+        end
+      end
+    end
+
     class RecordSchema < FieldSchema
       FIELD_TYPES = {
         string: StringFieldSchema,
@@ -123,6 +171,9 @@ module Fluent
         float: FloatFieldSchema,
         boolean: BooleanFieldSchema,
         timestamp: TimestampFieldSchema,
+        date: DateFieldSchema,
+        datetime: DateTimeFieldSchema,
+        time: TimeFieldSchema,
         record: RecordSchema
       }.freeze
 

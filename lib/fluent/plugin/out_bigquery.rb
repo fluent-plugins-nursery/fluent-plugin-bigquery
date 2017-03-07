@@ -91,6 +91,7 @@ module Fluent
       #   Default is false, which treats unknown values as errors.
       config_param :ignore_unknown_values, :bool, default: false
 
+      config_param :schema, :array, default: nil
       config_param :schema_path, :string, default: nil
       config_param :fetch_schema, :bool, default: false
       config_param :fetch_schema_table, :string, default: nil
@@ -210,7 +211,11 @@ module Fluent
 
         @tablelist = @tables ? @tables : [@table]
 
+        legacy_schema_config_deprecation
         @fields = Fluent::BigQuery::RecordSchema.new('record')
+        if @schema
+          @fields.load_schema(@schema)
+        end
         if @schema_path
           @fields.load_schema(MultiJson.load(File.read(@schema_path)))
         end
@@ -241,6 +246,8 @@ module Fluent
         else
           @get_insert_id = nil
         end
+
+        warn "[DEPRECATION] `convert_hash_to_json` param is deprecated. If Hash value is inserted string field, plugin convert it to json automatically." if @convert_hash_to_json
       end
 
       def start
@@ -313,6 +320,12 @@ module Fluent
         end
         template_suffix_format = @template_suffix
         _write(chunk, table_id_format, template_suffix_format)
+      end
+
+      def legacy_schema_config_deprecation
+        if [@field_string, @field_integer, @field_float, @field_boolean, @field_timestamp].any?
+          warn "[DEPRECATION] `field_*` style schema config is deprecated. Instead of it, use `schema` config params that is array of json style."
+        end
       end
 
       def fetch_schema(allow_overwrite = true)
@@ -407,14 +420,9 @@ module Fluent
         def load(chunk, table_id)
           res = nil
 
-          if @prevent_duplicate_load
-            job_id = create_job_id(chunk, @dataset, table_id, @fields.to_a, @max_bad_records, @ignore_unknown_values)
-          else
-            job_id = nil
-          end
-
           create_upload_source(chunk) do |upload_source|
-            res = writer.create_load_job(@project, @dataset, table_id, upload_source, job_id, @fields, {
+            res = writer.create_load_job(chunk.unique_id, @project, @dataset, table_id, upload_source, @fields, {
+              prevent_duplicate_load: @prevent_duplicate_load,
               ignore_unknown_values: @ignore_unknown_values, max_bad_records: @max_bad_records,
               timeout_sec: @request_timeout_sec, open_timeout_sec: @request_open_timeout_sec, auto_create_table: @auto_create_table,
               time_partitioning_type: @time_partitioning_type, time_partitioning_expiration: @time_partitioning_expiration
@@ -461,10 +469,6 @@ module Fluent
               yield file
             end
           end
-        end
-
-        def create_job_id(chunk, dataset, table, schema, max_bad_records, ignore_unknown_values)
-          "fluentd_job_" + Digest::SHA1.hexdigest("#{chunk.unique_id}#{dataset}#{table}#{schema}#{max_bad_records}#{ignore_unknown_values}")
         end
       end
     end
