@@ -256,9 +256,7 @@ module Fluent
         @tables_queue = @tablelist.shuffle
         @tables_mutex = Mutex.new
         @fetch_schema_mutex = Mutex.new
-
         @last_fetch_schema_time = 0
-        fetch_schema(false) if @fetch_schema
       end
 
       def writer
@@ -301,8 +299,6 @@ module Fluent
       end
 
       def format(tag, time, record)
-        fetch_schema if @fetch_schema_table
-
         if @replace_record_key
           record = replace_record_key(record)
         end
@@ -312,6 +308,13 @@ module Fluent
         end
 
         record = inject_values_to_record(tag, time, record)
+
+        begin
+          meta = metadata(tag, time, record)
+          fetch_schema(meta, allow_overwrite: true) if @fetch_schema
+        ensure
+          @buffer.metadata_list.delete(meta)
+        end
 
         buf = String.new
         row = @fields.format(record)
@@ -327,8 +330,7 @@ module Fluent
           @tables_queue.push t
           t
         end
-        template_suffix_format = @template_suffix
-        _write(chunk, table_id_format, template_suffix_format)
+        _write(chunk, table_id_format)
       end
 
       def legacy_schema_config_deprecation
@@ -337,21 +339,19 @@ module Fluent
         end
       end
 
-      def fetch_schema(allow_overwrite = true)
+      def fetch_schema(metadata, allow_overwrite: true)
         table_id = nil
         @fetch_schema_mutex.synchronize do
           if Fluent::Engine.now - @last_fetch_schema_time > @schema_cache_expire
-            table_id = @fetch_schema_table || @tablelist[0]
-            schema = writer.fetch_schema(@project, @dataset, table_id)
+            project = extract_placeholders(@project, metadata)
+            dataset = extract_placeholders(@dataset, metadata)
+            table_id = extract_placeholders(@fetch_schema_table || @tablelist[0], metadata)
+            schema = writer.fetch_schema(project, dataset, table_id)
 
             if schema
-              if allow_overwrite
-                fields = Fluent::BigQuery::RecordSchema.new("record")
-                fields.load_schema(schema, allow_overwrite)
-                @fields = fields
-              else
-                @fields.load_schema(schema, allow_overwrite)
-              end
+              fields = Fluent::BigQuery::RecordSchema.new("record")
+              fields.load_schema(schema, allow_overwrite)
+              @fields = fields
             else
               if @fields.empty?
                 raise "failed to fetch schema from bigquery"
@@ -366,7 +366,7 @@ module Fluent
       end
 
       module InsertImplementation
-        def _write(chunk, table_format, template_suffix_format)
+        def _write(chunk, table_format)
           rows = chunk.open do |io|
             io.map do |line|
               record = MultiJson.load(line)
@@ -376,23 +376,25 @@ module Fluent
             end
           end
 
+          project = extract_placeholders(@project, chunk.metadata)
+          dataset = extract_placeholders(@dataset, chunk.metadata)
           group = rows.group_by do |_|
             [
               extract_placeholders(table_format, chunk.metadata),
-              template_suffix_format ? extract_placeholders(template_suffix_format, chunk.metadata) : nil,
+              @template_suffix ? extract_placeholders(@template_suffix, chunk.metadata) : nil,
             ]
           end
           group.each do |(table_id, template_suffix), group_rows|
-            insert(table_id, group_rows, template_suffix)
+            insert(project, dataset, table_id, group_rows, template_suffix)
           end
         end
 
-        def insert(table_id, rows, template_suffix)
-          writer.insert_rows(@project, @dataset, table_id, rows, template_suffix: template_suffix)
+        def insert(project, dataset, table_id, rows, template_suffix)
+          writer.insert_rows(project, dataset, table_id, rows, template_suffix: template_suffix)
         rescue Fluent::BigQuery::Error => e
           if @auto_create_table && e.status_code == 404 && /Not Found: Table/i =~ e.message
             # Table Not Found: Auto Create Table
-            writer.create_table(@project, @dataset, table_id, @fields)
+            writer.create_table(project, dataset, table_id, @fields)
             raise "table created. send rows next time."
           end
 
@@ -421,16 +423,18 @@ module Fluent
       end
 
       module LoadImplementation
-        def _write(chunk, table_id_format, _)
+        def _write(chunk, table_id_format)
+          project = extract_placeholders(@project, chunk.metadata)
+          dataset = extract_placeholders(@dataset, chunk.metadata)
           table_id = extract_placeholders(table_id_format, chunk.metadata)
-          load(chunk, table_id)
+          load(chunk, project, dataset, table_id)
         end
 
-        def load(chunk, table_id)
+        def load(chunk, project, dataset, table_id)
           res = nil
 
           create_upload_source(chunk) do |upload_source|
-            res = writer.create_load_job(chunk.unique_id, @project, @dataset, table_id, upload_source, @fields)
+            res = writer.create_load_job(chunk.unique_id, project, dataset, table_id, upload_source, @fields)
           end
         rescue Fluent::BigQuery::Error => e
           raise if e.retryable?
