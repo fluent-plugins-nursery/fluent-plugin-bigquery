@@ -330,7 +330,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
   end
 
   def test_format_with_schema
-    now = Time.now
+    now = Time.at(Time.now.to_i)
     input = {
       "request" => {
         "vhost" => :bar,
@@ -360,7 +360,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       },
     }
     expected = {
-      "time" => now.to_i,
+      "time" => now.to_f,
       "request" => {
         "vhost" => "bar",
         "path" => "/path/to/baz",
@@ -412,7 +412,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
   end
 
   def test_format_repeated_field_with_schema
-    now = Time.now
+    now = Time.at(Time.now.to_i)
     input = {
       "tty" => nil,
       "pwd" => "/home/yugui",
@@ -420,7 +420,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       "argv" => %w[ tail -f /var/log/fluentd/fluentd.log ]
     }
     expected = {
-      "time" => now.to_i,
+      "time" => now.to_f,
       "pwd" => "/home/yugui",
       "user" => "fluentd",
       "argv" => %w[ tail -f /var/log/fluentd/fluentd.log ]
@@ -539,11 +539,12 @@ class BigQueryOutputTest < Test::Unit::TestCase
       </inject>
 
       fetch_schema true
+      fetch_schema_table foo
       schema [{"name": "time", "type": "INTEGER"}]
     CONFIG
 
     writer = stub_writer(driver)
-    mock(writer).fetch_schema('yourproject_id', 'yourdataset_id', now.strftime('foo')) do
+    mock(writer).fetch_schema('yourproject_id', 'yourdataset_id', 'foo') do
       sudo_schema_response.deep_stringify_keys["schema"]["fields"]
     end
 
@@ -634,7 +635,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
     mock(driver.instance).insert("foo", [expected], nil)
 
     driver.run do
-      driver.feed('tag', now, input)
+      driver.feed('tag', Fluent::EventTime.now, input)
     end
   end
 
@@ -810,15 +811,11 @@ class BigQueryOutputTest < Test::Unit::TestCase
       raise ex
     end
 
-    error = nil
-    begin
+    assert_raise(Fluent::BigQuery::RetryableError) do
       driver.run do
         driver.feed("tag", Time.now.to_i, {"a" => "b"})
       end
-    rescue ThreadError => e
-      error = e.cause
     end
-    assert_kind_of(Fluent::BigQuery::RetryableError, error)
   end
 
   def test_write_with_not_retryable_error
@@ -880,7 +877,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
     chunk = driver.instance.buffer.generate_chunk(metadata).tap do |c|
       c.append([driver.instance.format(tag, time, record)])
     end
-    assert_raise Fluent::BigQuery::Writer::UnRetryableError do
+    assert_raise Fluent::BigQuery::UnRetryableError do
       driver.instance.write(chunk)
     end
     assert_in_delta driver.instance.retry.secondary_transition_at , Time.now, 0.1
@@ -911,7 +908,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
     writer = stub_writer(driver)
     io = StringIO.new("hello")
     mock(driver.instance).create_upload_source(is_a(Fluent::Plugin::Buffer::Chunk)).yields(io)
-    mock(writer).wait_load_job(is_a(String), "yourdataset_id", "dummy_job_id", "foo") { nil }
+    mock(writer).wait_load_job(is_a(String), "yourproject_id", "yourdataset_id", "dummy_job_id", "foo") { nil }
     mock(writer.client).insert_job('yourproject_id', {
       configuration: {
         load: {
@@ -1150,7 +1147,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       s
     end
 
-    assert_raise Fluent::BigQuery::Writer::UnRetryableError do
+    assert_raise Fluent::BigQuery::UnRetryableError do
       driver.instance.write(chunk)
     end
     assert_in_delta driver.instance.retry.secondary_transition_at , Time.now, 0.1
@@ -1189,7 +1186,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
   end
 
   def test_auto_create_table_by_bigquery_api
-    now = Time.now
+    now = Time.at(Time.now.to_i)
     message = {
       "time" => now.to_i,
       "request" => {
@@ -1236,15 +1233,11 @@ class BigQueryOutputTest < Test::Unit::TestCase
     )) { raise Fluent::BigQuery::RetryableError.new(nil, Google::Apis::ServerError.new("Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404, body: "Not found: Table yourproject_id:yourdataset_id.foo")) }
     mock(writer).create_table('yourproject_id', 'yourdataset_id', 'foo', driver.instance.instance_variable_get(:@fields), time_partitioning_type: nil, time_partitioning_expiration: nil)
 
-    chunk = Fluent::MemoryBufferChunk.new("my.tag")
-    chunk << message.to_msgpack
-
-    driver.instance.start
-
-    assert_raise(RuntimeError) {
-      driver.instance.write(chunk)
-    }
-    driver.instance.shutdown
+    assert_raise(RuntimeError) do
+      driver.run do
+        driver.feed("tag", Fluent::EventTime.from_time(now), message)
+      end
+    end
   end
 
   def test_auto_create_partitioned_table_by_bigquery_api
@@ -1298,17 +1291,11 @@ class BigQueryOutputTest < Test::Unit::TestCase
     )) { raise Fluent::BigQuery::RetryableError.new(nil, Google::Apis::ServerError.new("Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404, body: "Not found: Table yourproject_id:yourdataset_id.foo")) }
     mock(writer).create_table('yourproject_id', 'yourdataset_id', 'foo', driver.instance.instance_variable_get(:@fields), time_partitioning_type: :day, time_partitioning_expiration: 3600)
 
-    driver.instance_start
-    tag, time, record = "tag", Time.now.to_i, message
-    metadata = driver.instance.metadata_for_test(tag, time, record)
-    chunk = driver.instance.buffer.generate_chunk(metadata).tap do |c|
-      c.append([driver.instance.format(tag, time, record)])
+    assert_raise(RuntimeError) do
+      driver.run do
+        driver.feed("tag", Fluent::EventTime.now, message[:json])
+      end
     end
-
-    assert_raise(RuntimeError) {
-      driver.instance.write(chunk)
-    }
-    driver.instance_shutdown
   end
 
   private
