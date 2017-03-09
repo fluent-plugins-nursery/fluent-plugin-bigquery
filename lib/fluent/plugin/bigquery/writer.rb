@@ -1,10 +1,10 @@
 module Fluent
   module BigQuery
     class Writer
-      def initialize(log, auth_method, auth_options = {})
+      def initialize(log, auth_method, options = {})
         @auth_method = auth_method
         @scope = "https://www.googleapis.com/auth/bigquery"
-        @auth_options = auth_options
+        @options = options
         @log = log
         @num_errors_per_chunk = {}
 
@@ -22,7 +22,7 @@ module Fluent
         @client = client
       end
 
-      def create_table(project, dataset, table_id, record_schema, time_partitioning_type: nil, time_partitioning_expiration: nil)
+      def create_table(project, dataset, table_id, record_schema)
         create_table_retry_limit = 3
         create_table_retry_wait = 1
         create_table_retry_count = 0
@@ -38,10 +38,10 @@ module Fluent
             }
           }
 
-          if time_partitioning_type
+          if @options[:time_partitioning_type]
             definition[:time_partitioning] = {
-              type: time_partitioning_type.to_s.upcase,
-              expiration_ms: time_partitioning_expiration ? time_partitioning_expiration * 1000 : nil
+              type: @options[:time_partitioning_type].to_s.upcase,
+              expiration_ms: @options[:time_partitioning_expiration] ? @options[:time_partitioning_expiration] * 1000 : nil
             }.compact
           end
           client.insert_table(project, dataset, definition, {})
@@ -84,15 +84,15 @@ module Fluent
         nil
       end
 
-      def insert_rows(project, dataset, table_id, rows, skip_invalid_rows: false, ignore_unknown_values: false, template_suffix: nil, timeout_sec: nil, open_timeout_sec: 60)
+      def insert_rows(project, dataset, table_id, rows, template_suffix: nil)
         body = {
           rows: rows,
-          skip_invalid_rows: skip_invalid_rows,
-          ignore_unknown_values: ignore_unknown_values,
+          skip_invalid_rows: @options[:skip_invalid_rows],
+          ignore_unknown_values: @options[:ignore_unknown_values],
         }
         body.merge!(template_suffix: template_suffix) if template_suffix
         res = client.insert_all_table_data(project, dataset, table_id, body, {
-          options: {timeout_sec: timeout_sec, open_timeout_sec: open_timeout_sec}
+          options: {timeout_sec: @options[:timeout_sec], open_timeout_sec: @options[:open_timeout_sec]}
         })
         log.debug "insert rows", project_id: project, dataset: dataset, table: table_id, count: rows.size
         log.warn "insert errors", project_id: project, dataset: dataset, table: table_id, insert_errors: res.insert_errors.to_s if res.insert_errors && !res.insert_errors.empty?
@@ -105,7 +105,7 @@ module Fluent
         raise Fluent::BigQuery::Error.wrap(e)
       end
 
-      def create_load_job(chunk_id, project, dataset, table_id, upload_source, fields, prevent_duplicate_load: false, ignore_unknown_values: false, max_bad_records: 0, timeout_sec: nil, open_timeout_sec: 60, auto_create_table: nil, time_partitioning_type: nil, time_partitioning_expiration: nil)
+      def create_load_job(chunk_id, project, dataset, table_id, upload_source, fields)
         configuration = {
           configuration: {
             load: {
@@ -119,14 +119,14 @@ module Fluent
               },
               write_disposition: "WRITE_APPEND",
               source_format: "NEWLINE_DELIMITED_JSON",
-              ignore_unknown_values: ignore_unknown_values,
-              max_bad_records: max_bad_records,
+              ignore_unknown_values: @options[:ignore_unknown_values],
+              max_bad_records: @options[:max_bad_records],
             }
           }
         }
 
-        job_id = create_job_id(chunk_id, dataset, table_id, fields.to_a, max_bad_records, ignore_unknown_values) if prevent_duplicate_load
-        configuration[:configuration][:load].merge!(create_disposition: "CREATE_NEVER") if time_partitioning_type
+        job_id = create_job_id(chunk_id, dataset, table_id, fields.to_a) if @options[:prevent_duplicate_load]
+        configuration[:configuration][:load].merge!(create_disposition: "CREATE_NEVER") if @options[:time_partitioning_type]
         configuration.merge!({job_reference: {project_id: project, job_id: job_id}}) if job_id
 
         # If target table is already exist, omit schema configuration.
@@ -146,8 +146,8 @@ module Fluent
             upload_source: upload_source,
             content_type: "application/octet-stream",
             options: {
-              timeout_sec: timeout_sec,
-              open_timeout_sec: open_timeout_sec,
+              timeout_sec: @options[:timeout_sec],
+              open_timeout_sec: @options[:open_timeout_sec],
             }
           }
         )
@@ -159,9 +159,14 @@ module Fluent
         reason = e.respond_to?(:reason) ? e.reason : nil
         log.error "job.load API", project_id: project, dataset: dataset, table: table_id, code: e.status_code, message: e.message, reason: reason
 
-        if auto_create_table && e.status_code == 404 && /Not Found: Table/i =~ e.message
+        if @options[:auto_create_table] && e.status_code == 404 && /Not Found: Table/i =~ e.message
           # Table Not Found: Auto Create Table
-          create_table(project, dataset, table_id, fields, time_partitioning_type: time_partitioning_type, time_partitioning_expiration: time_partitioning_expiration)
+          create_table(
+            project,
+            dataset,
+            table_id,
+            fields,
+          )
           raise "table created. send rows next time."
         end
 
@@ -229,9 +234,9 @@ module Fluent
 
       def get_auth_from_private_key
         require 'google/api_client/auth/key_utils'
-        private_key_path = @auth_options[:private_key_path]
-        private_key_passphrase = @auth_options[:private_key_passphrase]
-        email = @auth_options[:email]
+        private_key_path = @options[:private_key_path]
+        private_key_passphrase = @options[:private_key_passphrase]
+        email = @options[:email]
 
         key = Google::APIClient::KeyUtils.load_from_pkcs12(private_key_path, private_key_passphrase)
         Signet::OAuth2::Client.new(
@@ -248,7 +253,7 @@ module Fluent
       end
 
       def get_auth_from_json_key
-        json_key = @auth_options[:json_key]
+        json_key = @options[:json_key]
 
         begin
           JSON.parse(json_key)
@@ -270,8 +275,8 @@ module Fluent
         table_id.gsub(/\$\d+$/, "")
       end
 
-      def create_job_id(chunk_id, dataset, table, schema, max_bad_records, ignore_unknown_values)
-        job_id_key = "#{chunk_id}#{dataset}#{table}#{schema.to_s}#{max_bad_records}#{ignore_unknown_values}#{@num_errors_per_chunk[chunk_id]}"
+      def create_job_id(chunk_id, dataset, table, schema)
+        job_id_key = "#{chunk_id}#{dataset}#{table}#{schema.to_s}#{@options[:max_bad_records]}#{@options[:ignore_unknown_values]}#{@num_errors_per_chunk[chunk_id]}"
         @log.debug "job_id_key: #{job_id_key}"
         "fluentd_job_" + Digest::SHA1.hexdigest(job_id_key)
       end
