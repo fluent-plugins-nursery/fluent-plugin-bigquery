@@ -247,6 +247,9 @@ module Fluent
           @get_insert_id = nil
         end
 
+        placeholder_params = "project=#{@project}/dataset=#{@dataset}/table=#{@tablelist.join(",")}/fetch_schema_table=#{@fetch_schema_table}/template_suffix=#{@template_suffix}"
+        placeholder_validate!(:bigquery, placeholder_params)
+
         warn "[DEPRECATION] `convert_hash_to_json` param is deprecated. If Hash value is inserted string field, plugin convert it to json automatically." if @convert_hash_to_json
       end
 
