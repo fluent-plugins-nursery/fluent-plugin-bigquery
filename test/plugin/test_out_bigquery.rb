@@ -541,6 +541,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
       fetch_schema true
       fetch_schema_table foo
       schema [{"name": "time", "type": "INTEGER"}]
+
+      <buffer time>
+        timekey 1d
+      </buffer>
     CONFIG
 
     writer = stub_writer(driver)
