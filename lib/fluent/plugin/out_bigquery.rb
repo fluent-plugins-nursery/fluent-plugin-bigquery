@@ -11,7 +11,7 @@ module Fluent
     class BigQueryOutput < Output
       Fluent::Plugin.register_output('bigquery', self)
 
-      helpers :inject, :event_emitter
+      helpers :inject
 
       # https://developers.google.com/bigquery/browser-tool-quickstart
       # https://developers.google.com/bigquery/bigquery-api-quickstart
