@@ -221,7 +221,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
   end
 
   def test_format
-    now = Time.now
+    now = Fluent::EventTime.new(Time.now.to_i)
     input = {
       "status" => "1",
       "bytes" => 3.0,
@@ -330,7 +330,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
   end
 
   def test_format_with_schema
-    now = Time.at(Time.now.to_i)
+    now = Fluent::EventTime.new(Time.now.to_i)
     input = {
       "request" => {
         "vhost" => :bar,
@@ -412,7 +412,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
   end
 
   def test_format_repeated_field_with_schema
-    now = Time.at(Time.now.to_i)
+    now = Fluent::EventTime.new(Time.now.to_i)
     input = {
       "tty" => nil,
       "pwd" => "/home/yugui",
@@ -449,7 +449,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
   end
 
   def test_format_fetch_from_bigquery_api
-    now = Time.now
+    now = Fluent::EventTime.new(Time.now.to_i)
     input = {
       "tty" => nil,
       "pwd" => "/home/yugui",
@@ -491,8 +491,8 @@ class BigQueryOutputTest < Test::Unit::TestCase
 
     fields = driver.instance.instance_eval{ @fields }
     assert fields["time"]
-    assert_equal :integer, fields["time"].type  # DO NOT OVERWRITE
-    assert_equal :nullable, fields["time"].mode # DO NOT OVERWRITE
+    assert_equal :timestamp, fields["time"].type
+    assert_equal :required, fields["time"].mode
 
     assert fields["tty"]
     assert_equal :string, fields["tty"].type
@@ -512,7 +512,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
   end
 
   def test_format_fetch_from_bigquery_api_with_fetch_schema_table
-    now = Time.now
+    now = Fluent::EventTime.new(Time.now.to_i)
     input = {
       "tty" => nil,
       "pwd" => "/home/yugui",
@@ -541,6 +541,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
       fetch_schema true
       fetch_schema_table foo
       schema [{"name": "time", "type": "INTEGER"}]
+
+      <buffer time>
+        timekey 1d
+      </buffer>
     CONFIG
 
     writer = stub_writer(driver)
@@ -555,8 +559,8 @@ class BigQueryOutputTest < Test::Unit::TestCase
 
     fields = driver.instance.instance_eval{ @fields }
     assert fields["time"]
-    assert_equal :integer, fields["time"].type  # DO NOT OVERWRITE
-    assert_equal :nullable, fields["time"].mode # DO NOT OVERWRITE
+    assert_equal :timestamp, fields["time"].type
+    assert_equal :required, fields["time"].mode
 
     assert fields["tty"]
     assert_equal :string, fields["tty"].type
@@ -597,7 +601,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       insert_id_field uuid
       schema [{"name": "uuid", "type": "STRING"}]
     CONFIG
-    mock(driver.instance).insert("foo", [expected], nil)
+    mock(driver.instance).insert("yourproject_id", "yourdataset_id", "foo", [expected], nil)
 
     driver.run do
       driver.feed('tag', now, input)
@@ -632,7 +636,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       ]}]
     CONFIG
 
-    mock(driver.instance).insert("foo", [expected], nil)
+    mock(driver.instance).insert("yourproject_id", "yourdataset_id", "foo", [expected], nil)
 
     driver.run do
       driver.feed('tag', Fluent::EventTime.now, input)
@@ -640,7 +644,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
   end
 
   def test_replace_record_key
-    now = Time.now
+    now = Fluent::EventTime.now
     input = {
       "vhost" => :bar,
       "@referer" => "http://referer.example",
@@ -686,7 +690,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
   end
 
   def test_convert_hash_to_json
-    now = Time.now
+    now = Fluent::EventTime.now
     input = {
       "vhost" => :bar,
       "referer" => "http://referer.example",
@@ -1164,10 +1168,9 @@ class BigQueryOutputTest < Test::Unit::TestCase
       project yourproject_id
       dataset yourdataset_id
 
-      field_integer time,status,bytes
-      field_string  vhost,path,method,protocol,agent,referer,remote.host,remote.ip,remote.user
-      field_float   requesttime
-      field_boolean bot_access,loginsession
+      schema [
+        {"name": "time", "type": "INTEGER"}
+      ]
     CONFIG
 
     writer = stub_writer(driver)
