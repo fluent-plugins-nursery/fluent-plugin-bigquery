@@ -1027,10 +1027,6 @@ class BigQueryOutputTest < Test::Unit::TestCase
         s
       end
 
-      if d["allow_retry_insert_errors"]
-        mock(driver.instance).flush_secondary(is_a(Fluent::Output))
-      end
-
       chunk = Fluent::MemoryBufferChunk.new("my.tag")
       entry.each do |e|
         chunk << e.to_msgpack
