@@ -4,7 +4,7 @@ module Fluent
     class Error < StandardError
       RETRYABLE_ERROR_REASON = %w(backendError internalError rateLimitExceeded tableUnavailable).freeze
       RETRYABLE_INSERT_ERRORS_REASON = %w(timeout).freeze
-      RETRYABLE_STATUS_CODE = [500, 502, 503]
+      RETRYABLE_STATUS_CODE = [500, 502, 503, 504]
 
       class << self
         def wrap(google_api_error, message = nil, force_unretryable: false)
