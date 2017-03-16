@@ -777,62 +777,71 @@ class BigQueryOutputTest < Test::Unit::TestCase
 
   def test_write_with_retryable_error
     entry = {json: {a: "b"}}, {json: {b: "c"}}
-    driver = create_driver(<<-CONFIG)
-      table foo
-      email foo@bar.example
-      private_key_path /path/to/key
-      project yourproject_id
-      dataset yourdataset_id
+    data_input = [
+      { "status_code" => 500  },
+      { "status_code" => 502  },
+      { "status_code" => 503  },
+      { "status_code" => 504  },
+    ]
 
-      time_format %s
-      time_field  time
+    data_input.each do |d|
+      driver = create_driver(<<-CONFIG)
+        table foo
+        email foo@bar.example
+        private_key_path /path/to/key
+        project yourproject_id
+        dataset yourdataset_id
 
-      schema [
-        {"name": "time", "type": "INTEGER"},
-        {"name": "status", "type": "INTEGER"},
-        {"name": "bytes", "type": "INTEGER"},
-        {"name": "vhost", "type": "STRING"},
-        {"name": "path", "type": "STRING"},
-        {"name": "method", "type": "STRING"},
-        {"name": "protocol", "type": "STRING"},
-        {"name": "agent", "type": "STRING"},
-        {"name": "referer", "type": "STRING"},
-        {"name": "remote", "type": "RECORD", "fields": [
-          {"name": "host", "type": "STRING"},
-          {"name": "ip", "type": "STRING"},
-          {"name": "user", "type": "STRING"}
-        ]},
-        {"name": "requesttime", "type": "FLOAT"},
-        {"name": "bot_access", "type": "BOOLEAN"},
-        {"name": "loginsession", "type": "BOOLEAN"}
-      ]
-      <secondary>
-        type file
-        path error
-        utc
-      </secondary>
-    CONFIG
+        time_format %s
+        time_field  time
 
-    writer = stub_writer(driver)
-    mock(writer.client).insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo', {
-      rows: entry,
-      skip_invalid_rows: false,
-      ignore_unknown_values: false
-    }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) do
-      ex = Google::Apis::ServerError.new("error", status_code: 500)
-      raise ex
-    end
+          schema [
+            {"name": "time", "type": "INTEGER"},
+            {"name": "status", "type": "INTEGER"},
+            {"name": "bytes", "type": "INTEGER"},
+            {"name": "vhost", "type": "STRING"},
+            {"name": "path", "type": "STRING"},
+            {"name": "method", "type": "STRING"},
+            {"name": "protocol", "type": "STRING"},
+            {"name": "agent", "type": "STRING"},
+            {"name": "referer", "type": "STRING"},
+            {"name": "remote", "type": "RECORD", "fields": [
+              {"name": "host", "type": "STRING"},
+              {"name": "ip", "type": "STRING"},
+              {"name": "user", "type": "STRING"}
+            ]},
+            {"name": "requesttime", "type": "FLOAT"},
+            {"name": "bot_access", "type": "BOOLEAN"},
+            {"name": "loginsession", "type": "BOOLEAN"}
+          ]
+          <secondary>
+            type file
+            path error
+            utc
+          </secondary>
+        CONFIG
 
-    chunk = Fluent::MemoryBufferChunk.new("my.tag")
-    entry.each do |e|
-      chunk << e.to_msgpack
-    end
+        writer = stub_writer(driver)
+        mock(writer.client).insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo', {
+          rows: entry,
+          skip_invalid_rows: false,
+          ignore_unknown_values: false
+        }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) do
+          ex = Google::Apis::ServerError.new("error", status_code: d["status_code"])
+          raise ex
+        end
 
-    driver.instance.start
-    assert_raise Fluent::BigQuery::RetryableError do
-      driver.instance.write(chunk)
-    end
-    driver.instance.shutdown
+        chunk = Fluent::MemoryBufferChunk.new("my.tag")
+        entry.each do |e|
+          chunk << e.to_msgpack
+        end
+
+        driver.instance.start
+        assert_raise Fluent::BigQuery::RetryableError do
+          driver.instance.write(chunk)
+        end
+        driver.instance.shutdown
+      end
   end
 
   def test_write_with_not_retryable_error
