@@ -763,6 +763,13 @@ class BigQueryOutputTest < Test::Unit::TestCase
   end
 
   def test_write_with_retryable_error
+    data_input = [
+      { "status_code" => 500  },
+      { "status_code" => 502  },
+      { "status_code" => 503  },
+    ]
+
+    data_input.each do |d|
     driver = create_driver(<<-CONFIG)
       table foo
       email foo@bar.example
@@ -808,7 +815,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       skip_invalid_rows: false,
       ignore_unknown_values: false
     }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) do
-      ex = Google::Apis::ServerError.new("error", status_code: 500)
+      ex = Google::Apis::ServerError.new("error", status_code: d["status_code"])
       raise ex
     end
 
@@ -817,6 +824,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
         driver.feed("tag", Time.now.to_i, {"a" => "b"})
       end
     end
+  end
   end
 
   def test_write_with_not_retryable_error
