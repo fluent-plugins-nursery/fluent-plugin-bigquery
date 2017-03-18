@@ -319,12 +319,17 @@ module Fluent
           @buffer.metadata_list.delete(meta)
         end
 
-        buf = String.new
-        row = @fields.format(record)
-        unless row.empty?
-          buf << MultiJson.dump(row) + "\n"
+        begin
+          buf = String.new
+          row = @fields.format(record)
+          unless row.empty?
+            buf << MultiJson.dump(row) + "\n"
+          end
+          buf
+        rescue
+          log.error("format error", record: record, schema: @fields)
+          raise
         end
-        buf
       end
 
       def write(chunk)
