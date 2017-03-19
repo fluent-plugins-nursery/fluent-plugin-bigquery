@@ -489,7 +489,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
 
     assert_equal expected, MultiJson.load(buf)
 
-    table_schema = driver.instance.instance_eval{ get_schema('yourproject_id', 'yourdataset_id', 'foo') }
+    table_schema = driver.instance.instance_eval{ @fetched_schemas['yourproject_id.yourdataset_id.foo'] }
     assert table_schema["time"]
     assert_equal :timestamp, table_schema["time"].type
     assert_equal :required, table_schema["time"].mode
@@ -557,7 +557,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
 
     assert_equal expected, MultiJson.load(buf)
 
-    table_schema = driver.instance.instance_eval{ get_schema('yourproject_id', 'yourdataset_id', 'foo') }
+    table_schema = driver.instance.instance_eval{ @fetched_schemas['yourproject_id.yourdataset_id.foo'] }
     assert table_schema["time"]
     assert_equal :timestamp, table_schema["time"].type
     assert_equal :required, table_schema["time"].mode

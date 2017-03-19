@@ -386,9 +386,9 @@ module Fluent
         extract_placeholders(@fetch_schema_table || @tablelist[0], metadata)
       end
 
-      def get_schema(project, dataset, table_id)
+      def get_schema(project, dataset, metadata)
         if @fetch_schema
-          @fetched_schemas["#{project}.#{dataset}.#{table_id}"]
+          @fetched_schemas["#{project}.#{dataset}.#{fetch_schema_target_table(metadata)}"] || fetch_schema(metadata)
         else
           @table_schema
         end
@@ -410,7 +410,7 @@ module Fluent
           table_id = extract_placeholders(table_format, chunk.metadata)
           template_suffix = @template_suffix ? extract_placeholders(@template_suffix, chunk.metadata) : nil
 
-          schema = get_schema(project, dataset, fetch_schema_target_table(chunk.metadata))
+          schema = get_schema(project, dataset, chunk.metadata)
 
           insert(project, dataset, table_id, rows, schema, template_suffix)
         end
@@ -454,7 +454,7 @@ module Fluent
           dataset = extract_placeholders(@dataset, chunk.metadata)
           table_id = extract_placeholders(table_id_format, chunk.metadata)
 
-          schema = get_schema(project, dataset, fetch_schema_target_table(chunk.metadata))
+          schema = get_schema(project, dataset, chunk.metadata)
 
           load(chunk, project, dataset, table_id, schema)
         end
