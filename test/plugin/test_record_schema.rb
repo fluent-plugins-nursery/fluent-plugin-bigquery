@@ -101,45 +101,29 @@ class RecordSchemaTest < Test::Unit::TestCase
 
   def test_load_schema
     fields = Fluent::BigQuery::RecordSchema.new("record")
-    fields.load_schema(base_schema, true)
+    fields.load_schema(base_schema)
     assert { fields.to_a.as_json == base_schema }
   end
 
   def test_load_schema_allow_overwrite_with_type_changed_column
     fields = Fluent::BigQuery::RecordSchema.new("record")
-    fields.load_schema(base_schema, true)
+    fields.load_schema(base_schema)
 
-    fields.load_schema(base_schema_with_type_changed_column, true)
+    fields.load_schema(base_schema_with_type_changed_column)
     assert { fields.to_a.as_json == base_schema_with_type_changed_column }
   end
 
   def test_load_schema_allow_overwrite_with_new_column
     fields = Fluent::BigQuery::RecordSchema.new("record")
-    fields.load_schema(base_schema, true)
+    fields.load_schema(base_schema)
 
-    fields.load_schema(base_schema_with_new_column, true)
-    assert { fields.to_a.as_json == base_schema_with_new_column }
-  end
-
-  def test_load_schema_not_allow_overwrite_with_type_changed_column
-    fields = Fluent::BigQuery::RecordSchema.new("record")
-    fields.load_schema(base_schema, false)
-
-    fields.load_schema(base_schema_with_type_changed_column, false)
-    assert { fields.to_a.as_json == base_schema }
-  end
-
-  def test_load_schema_no_allow_overwrite_with_new_column
-    fields = Fluent::BigQuery::RecordSchema.new("record")
-    fields.load_schema(base_schema, false)
-
-    fields.load_schema(base_schema_with_new_column, false)
+    fields.load_schema(base_schema_with_new_column)
     assert { fields.to_a.as_json == base_schema_with_new_column }
   end
 
   def test_format_one
     fields = Fluent::BigQuery::RecordSchema.new("record")
-    fields.load_schema(base_schema, false)
+    fields.load_schema(base_schema)
 
     time = Time.local(2016, 2, 7, 19, 0, 0).utc
 
@@ -156,7 +140,7 @@ class RecordSchemaTest < Test::Unit::TestCase
 
   def test_format_one_convert_array_or_hash_to_json
     fields = Fluent::BigQuery::RecordSchema.new("record")
-    fields.load_schema(base_schema, false)
+    fields.load_schema(base_schema)
 
     time = Time.local(2016, 2, 7, 19, 0, 0).utc
 
@@ -173,7 +157,7 @@ class RecordSchemaTest < Test::Unit::TestCase
 
   def test_format_one_with_extra_column
     fields = Fluent::BigQuery::RecordSchema.new("record")
-    fields.load_schema(base_schema, false)
+    fields.load_schema(base_schema)
 
     time = Time.local(2016, 2, 7, 19, 0, 0).utc
 

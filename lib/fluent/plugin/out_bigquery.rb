@@ -212,12 +212,12 @@ module Fluent
         @tablelist = @tables ? @tables : [@table]
 
         legacy_schema_config_deprecation
-        @fields = Fluent::BigQuery::RecordSchema.new('record')
+        @table_schema = Fluent::BigQuery::RecordSchema.new('record')
         if @schema
-          @fields.load_schema(@schema)
+          @table_schema.load_schema(@schema)
         end
         if @schema_path
-          @fields.load_schema(MultiJson.load(File.read(@schema_path)))
+          @table_schema.load_schema(MultiJson.load(File.read(@schema_path)))
         end
 
         types = %i(string integer float boolean timestamp)
@@ -225,7 +225,7 @@ module Fluent
           fields = instance_variable_get("@field_#{type}")
           next unless fields
           fields.each do |field|
-            @fields.register_field field, type
+            @table_schema.register_field field, type
           end
         end
 
@@ -259,6 +259,7 @@ module Fluent
         @tables_queue = @tablelist.shuffle
         @tables_mutex = Mutex.new
         @fetch_schema_mutex = Mutex.new
+        @fetched_schemas = {}
         @last_fetch_schema_time = 0
       end
 
@@ -314,20 +315,25 @@ module Fluent
 
         begin
           meta = metadata(tag, time, record)
-          fetch_schema(meta, allow_overwrite: true) if @fetch_schema
+          schema =
+            if @fetch_schema
+              fetch_schema(meta)
+            else
+              @table_schema
+            end
         ensure
           @buffer.metadata_list.delete(meta)
         end
 
         begin
           buf = String.new
-          row = @fields.format(record)
+          row = schema.format(record)
           unless row.empty?
             buf << MultiJson.dump(row) + "\n"
           end
           buf
         rescue
-          log.error("format error", record: record, schema: @fields)
+          log.error("format error", record: record, schema: schema)
           raise
         end
       end
@@ -347,21 +353,22 @@ module Fluent
         end
       end
 
-      def fetch_schema(metadata, allow_overwrite: true)
+      def fetch_schema(metadata)
         table_id = nil
+        project = extract_placeholders(@project, metadata)
+        dataset = extract_placeholders(@dataset, metadata)
+        table_id = fetch_schema_target_table(metadata)
+
         @fetch_schema_mutex.synchronize do
           if Fluent::Engine.now - @last_fetch_schema_time > @schema_cache_expire
-            project = extract_placeholders(@project, metadata)
-            dataset = extract_placeholders(@dataset, metadata)
-            table_id = extract_placeholders(@fetch_schema_table || @tablelist[0], metadata)
             schema = writer.fetch_schema(project, dataset, table_id)
 
             if schema
-              fields = Fluent::BigQuery::RecordSchema.new("record")
-              fields.load_schema(schema, allow_overwrite)
-              @fields = fields
+              table_schema = Fluent::BigQuery::RecordSchema.new("record")
+              table_schema.load_schema(schema)
+              @fetched_schemas["#{project}.#{dataset}.#{table_id}"] = table_schema
             else
-              if @fields.empty?
+              if @fetched_schemas["#{project}.#{dataset}.#{table_id}"].empty?
                 raise "failed to fetch schema from bigquery"
               else
                 log.warn "#{table_id} uses previous schema"
@@ -370,6 +377,20 @@ module Fluent
 
             @last_fetch_schema_time = Fluent::Engine.now
           end
+        end
+
+        @fetched_schemas["#{project}.#{dataset}.#{table_id}"]
+      end
+
+      def fetch_schema_target_table(metadata)
+        extract_placeholders(@fetch_schema_table || @tablelist[0], metadata)
+      end
+
+      def get_schema(project, dataset, table_id)
+        if @fetch_schema
+          @fetched_schemas["#{project}.#{dataset}.#{table_id}"]
+        else
+          @table_schema
         end
       end
 
@@ -386,23 +407,20 @@ module Fluent
 
           project = extract_placeholders(@project, chunk.metadata)
           dataset = extract_placeholders(@dataset, chunk.metadata)
-          group = rows.group_by do |_|
-            [
-              extract_placeholders(table_format, chunk.metadata),
-              @template_suffix ? extract_placeholders(@template_suffix, chunk.metadata) : nil,
-            ]
-          end
-          group.each do |(table_id, template_suffix), group_rows|
-            insert(project, dataset, table_id, group_rows, template_suffix)
-          end
+          table_id = extract_placeholders(table_format, chunk.metadata)
+          template_suffix = @template_suffix ? extract_placeholders(@template_suffix, chunk.metadata) : nil
+
+          schema = get_schema(project, dataset, fetch_schema_target_table(chunk.metadata))
+
+          insert(project, dataset, table_id, rows, schema, template_suffix)
         end
 
-        def insert(project, dataset, table_id, rows, template_suffix)
+        def insert(project, dataset, table_id, rows, schema, template_suffix)
           writer.insert_rows(project, dataset, table_id, rows, template_suffix: template_suffix)
         rescue Fluent::BigQuery::Error => e
           if @auto_create_table && e.status_code == 404 && /Not Found: Table/i =~ e.message
             # Table Not Found: Auto Create Table
-            writer.create_table(project, dataset, table_id, @fields)
+            writer.create_table(project, dataset, table_id, schema)
             raise "table created. send rows next time."
           end
 
@@ -435,14 +453,17 @@ module Fluent
           project = extract_placeholders(@project, chunk.metadata)
           dataset = extract_placeholders(@dataset, chunk.metadata)
           table_id = extract_placeholders(table_id_format, chunk.metadata)
-          load(chunk, project, dataset, table_id)
+
+          schema = get_schema(project, dataset, fetch_schema_target_table(chunk.metadata))
+
+          load(chunk, project, dataset, table_id, schema)
         end
 
-        def load(chunk, project, dataset, table_id)
+        def load(chunk, project, dataset, table_id, schema)
           res = nil
 
           create_upload_source(chunk) do |upload_source|
-            res = writer.create_load_job(chunk.unique_id, project, dataset, table_id, upload_source, @fields)
+            res = writer.create_load_job(chunk.unique_id, project, dataset, table_id, upload_source, schema)
           end
         rescue Fluent::BigQuery::Error => e
           raise if e.retryable?
