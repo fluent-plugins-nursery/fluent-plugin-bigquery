@@ -258,9 +258,8 @@ module Fluent
 
         @tables_queue = @tablelist.shuffle
         @tables_mutex = Mutex.new
-        @fetch_schema_mutex = Mutex.new
         @fetched_schemas = {}
-        @last_fetch_schema_time = 0
+        @last_fetch_schema_time = Hash.new(0)
       end
 
       def writer
@@ -359,24 +358,22 @@ module Fluent
         dataset = extract_placeholders(@dataset, metadata)
         table_id = fetch_schema_target_table(metadata)
 
-        @fetch_schema_mutex.synchronize do
-          if Fluent::Engine.now - @last_fetch_schema_time > @schema_cache_expire
-            schema = writer.fetch_schema(project, dataset, table_id)
+        if Fluent::Engine.now - @last_fetch_schema_time["#{project}.#{dataset}.#{table_id}"] > @schema_cache_expire
+          schema = writer.fetch_schema(project, dataset, table_id)
 
-            if schema
-              table_schema = Fluent::BigQuery::RecordSchema.new("record")
-              table_schema.load_schema(schema)
-              @fetched_schemas["#{project}.#{dataset}.#{table_id}"] = table_schema
+          if schema
+            table_schema = Fluent::BigQuery::RecordSchema.new("record")
+            table_schema.load_schema(schema)
+            @fetched_schemas["#{project}.#{dataset}.#{table_id}"] = table_schema
+          else
+            if @fetched_schemas["#{project}.#{dataset}.#{table_id}"].empty?
+              raise "failed to fetch schema from bigquery"
             else
-              if @fetched_schemas["#{project}.#{dataset}.#{table_id}"].empty?
-                raise "failed to fetch schema from bigquery"
-              else
-                log.warn "#{table_id} uses previous schema"
-              end
+              log.warn "#{table_id} uses previous schema"
             end
-
-            @last_fetch_schema_time = Fluent::Engine.now
           end
+
+          @last_fetch_schema_time["#{project}.#{dataset}.#{table_id}"] = Fluent::Engine.now
         end
 
         @fetched_schemas["#{project}.#{dataset}.#{table_id}"]
