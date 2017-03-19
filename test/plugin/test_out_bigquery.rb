@@ -489,26 +489,26 @@ class BigQueryOutputTest < Test::Unit::TestCase
 
     assert_equal expected, MultiJson.load(buf)
 
-    fields = driver.instance.instance_eval{ @fields }
-    assert fields["time"]
-    assert_equal :timestamp, fields["time"].type
-    assert_equal :required, fields["time"].mode
+    table_schema = driver.instance.instance_eval{ get_schema('yourproject_id', 'yourdataset_id', 'foo') }
+    assert table_schema["time"]
+    assert_equal :timestamp, table_schema["time"].type
+    assert_equal :required, table_schema["time"].mode
 
-    assert fields["tty"]
-    assert_equal :string, fields["tty"].type
-    assert_equal :nullable, fields["tty"].mode
+    assert table_schema["tty"]
+    assert_equal :string, table_schema["tty"].type
+    assert_equal :nullable, table_schema["tty"].mode
 
-    assert fields["pwd"]
-    assert_equal :string, fields["pwd"].type
-    assert_equal :required, fields["pwd"].mode
+    assert table_schema["pwd"]
+    assert_equal :string, table_schema["pwd"].type
+    assert_equal :required, table_schema["pwd"].mode
 
-    assert fields["user"]
-    assert_equal :string, fields["user"].type
-    assert_equal :required, fields["user"].mode
+    assert table_schema["user"]
+    assert_equal :string, table_schema["user"].type
+    assert_equal :required, table_schema["user"].mode
 
-    assert fields["argv"]
-    assert_equal :string, fields["argv"].type
-    assert_equal :repeated, fields["argv"].mode
+    assert table_schema["argv"]
+    assert_equal :string, table_schema["argv"].type
+    assert_equal :repeated, table_schema["argv"].mode
   end
 
   def test_format_fetch_from_bigquery_api_with_fetch_schema_table
@@ -557,26 +557,26 @@ class BigQueryOutputTest < Test::Unit::TestCase
 
     assert_equal expected, MultiJson.load(buf)
 
-    fields = driver.instance.instance_eval{ @fields }
-    assert fields["time"]
-    assert_equal :timestamp, fields["time"].type
-    assert_equal :required, fields["time"].mode
+    table_schema = driver.instance.instance_eval{ get_schema('yourproject_id', 'yourdataset_id', 'foo') }
+    assert table_schema["time"]
+    assert_equal :timestamp, table_schema["time"].type
+    assert_equal :required, table_schema["time"].mode
 
-    assert fields["tty"]
-    assert_equal :string, fields["tty"].type
-    assert_equal :nullable, fields["tty"].mode
+    assert table_schema["tty"]
+    assert_equal :string, table_schema["tty"].type
+    assert_equal :nullable, table_schema["tty"].mode
 
-    assert fields["pwd"]
-    assert_equal :string, fields["pwd"].type
-    assert_equal :required, fields["pwd"].mode
+    assert table_schema["pwd"]
+    assert_equal :string, table_schema["pwd"].type
+    assert_equal :required, table_schema["pwd"].mode
 
-    assert fields["user"]
-    assert_equal :string, fields["user"].type
-    assert_equal :required, fields["user"].mode
+    assert table_schema["user"]
+    assert_equal :string, table_schema["user"].type
+    assert_equal :required, table_schema["user"].mode
 
-    assert fields["argv"]
-    assert_equal :string, fields["argv"].type
-    assert_equal :repeated, fields["argv"].mode
+    assert table_schema["argv"]
+    assert_equal :string, table_schema["argv"].type
+    assert_equal :repeated, table_schema["argv"].mode
   end
 
   def test__write_with_insert_id
@@ -601,7 +601,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       insert_id_field uuid
       schema [{"name": "uuid", "type": "STRING"}]
     CONFIG
-    mock(driver.instance).insert("yourproject_id", "yourdataset_id", "foo", [expected], nil)
+    mock(driver.instance).insert("yourproject_id", "yourdataset_id", "foo", [expected], instance_of(Fluent::BigQuery::RecordSchema), nil)
 
     driver.run do
       driver.feed('tag', now, input)
@@ -636,7 +636,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       ]}]
     CONFIG
 
-    mock(driver.instance).insert("yourproject_id", "yourdataset_id", "foo", [expected], nil)
+    mock(driver.instance).insert("yourproject_id", "yourdataset_id", "foo", [expected], instance_of(Fluent::BigQuery::RecordSchema), nil)
 
     driver.run do
       driver.feed('tag', Fluent::EventTime.now, input)
@@ -1230,7 +1230,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
     mock(writer).insert_rows('yourproject_id', 'yourdataset_id', 'foo', [{json: message.deep_symbolize_keys}], template_suffix: nil) do
       raise Fluent::BigQuery::RetryableError.new(nil, Google::Apis::ServerError.new("Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404, body: "Not found: Table yourproject_id:yourdataset_id.foo"))
     end
-    mock(writer).create_table('yourproject_id', 'yourdataset_id', 'foo', driver.instance.instance_variable_get(:@fields))
+    mock(writer).create_table('yourproject_id', 'yourdataset_id', 'foo', driver.instance.instance_variable_get(:@table_schema))
 
     assert_raise(RuntimeError) do
       driver.run do
@@ -1287,7 +1287,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
     mock(writer).insert_rows('yourproject_id', 'yourdataset_id', 'foo', [message], template_suffix: nil) do
       raise Fluent::BigQuery::RetryableError.new(nil, Google::Apis::ServerError.new("Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404, body: "Not found: Table yourproject_id:yourdataset_id.foo"))
     end
-    mock(writer).create_table('yourproject_id', 'yourdataset_id', 'foo', driver.instance.instance_variable_get(:@fields))
+    mock(writer).create_table('yourproject_id', 'yourdataset_id', 'foo', driver.instance.instance_variable_get(:@table_schema))
 
     assert_raise(RuntimeError) do
       driver.run do

@@ -209,7 +209,7 @@ module Fluent
         }
       end
 
-      def load_schema(schema, allow_overwrite=true)
+      def load_schema(schema)
         schema.each do |field|
           raise ConfigError, 'field must have type' unless field.key?('type')
 
@@ -220,13 +220,11 @@ module Fluent
           field_schema_class = FIELD_TYPES[type]
           raise ConfigError, "Invalid field type: #{field['type']}" unless field_schema_class
 
-          next if @fields.key?(name) and !allow_overwrite
-
           field_schema = field_schema_class.new(name, mode)
           @fields[name] = field_schema
           if type == :record
             raise ConfigError, "record field must have fields" unless field.key?('fields')
-            field_schema.load_schema(field['fields'], allow_overwrite)
+            field_schema.load_schema(field['fields'])
           end
         end
       end
