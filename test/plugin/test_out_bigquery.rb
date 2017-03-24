@@ -754,10 +754,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
     driver = create_driver
 
     writer = stub_writer(driver)
-    mock.proxy(writer).insert_rows('yourproject_id', 'yourdataset_id', 'foo', entry, hash_including(
-      skip_invalid_rows: false,
-      ignore_unknown_values: false
-    ))
+    mock.proxy(writer).insert_rows('yourproject_id', 'yourdataset_id', 'foo', entry, template_suffix: nil)
     mock(writer.client).insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo', {
       rows: entry,
       skip_invalid_rows: false,
@@ -1455,11 +1452,8 @@ class BigQueryOutputTest < Test::Unit::TestCase
       schema_path #{File.join(File.dirname(__FILE__), "testdata", "apache.schema")}
     CONFIG
     writer = stub_writer(driver)
-    mock(writer).insert_rows('yourproject_id', 'yourdataset_id', 'foo', [message], hash_including(
-      skip_invalid_rows: false,
-      ignore_unknown_values: false,
-    )) { raise Fluent::BigQuery::RetryableError.new(nil, Google::Apis::ServerError.new("Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404, body: "Not found: Table yourproject_id:yourdataset_id.foo")) }
-    mock(writer).create_table('yourproject_id', 'yourdataset_id', 'foo', driver.instance.instance_variable_get(:@fields), time_partitioning_type: nil, time_partitioning_expiration: nil)
+    mock(writer).insert_rows('yourproject_id', 'yourdataset_id', 'foo', [message], template_suffix: nil) { raise Fluent::BigQuery::RetryableError.new(nil, Google::Apis::ServerError.new("Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404, body: "Not found: Table yourproject_id:yourdataset_id.foo")) }
+    mock(writer).create_table('yourproject_id', 'yourdataset_id', 'foo', driver.instance.instance_variable_get(:@fields))
 
     chunk = Fluent::MemoryBufferChunk.new("my.tag")
     chunk << message.to_msgpack
@@ -1517,11 +1511,8 @@ class BigQueryOutputTest < Test::Unit::TestCase
       time_partitioning_expiration 1h
     CONFIG
     writer = stub_writer(driver)
-    mock(writer).insert_rows('yourproject_id', 'yourdataset_id', 'foo', [message], hash_including(
-      skip_invalid_rows: false,
-      ignore_unknown_values: false,
-    )) { raise Fluent::BigQuery::RetryableError.new(nil, Google::Apis::ServerError.new("Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404, body: "Not found: Table yourproject_id:yourdataset_id.foo")) }
-    mock(writer).create_table('yourproject_id', 'yourdataset_id', 'foo', driver.instance.instance_variable_get(:@fields), time_partitioning_type: :day, time_partitioning_expiration: 3600)
+    mock(writer).insert_rows('yourproject_id', 'yourdataset_id', 'foo', [message], template_suffix: nil) { raise Fluent::BigQuery::RetryableError.new(nil, Google::Apis::ServerError.new("Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404, body: "Not found: Table yourproject_id:yourdataset_id.foo")) }
+    mock(writer).create_table('yourproject_id', 'yourdataset_id', 'foo', driver.instance.instance_variable_get(:@fields))
 
     chunk = Fluent::MemoryBufferChunk.new("my.tag")
     chunk << message.to_msgpack

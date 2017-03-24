@@ -288,6 +288,16 @@ module Fluent
         private_key_path: @private_key_path, private_key_passphrase: @private_key_passphrase,
         email: @email,
         json_key: @json_key,
+        skip_invalid_rows: @skip_invalid_rows,
+        ignore_unknown_values: @ignore_unknown_values,
+        max_bad_records: @max_bad_records,
+        allow_retry_insert_errors: @allow_retry_insert_errors,
+        prevent_duplicate_load: @prevent_duplicate_load,
+        auto_create_table: @auto_create_table,
+        time_partitioning_type: @time_partitioning_type,
+        time_partitioning_expiration: @time_partitioning_expiration,
+        timeout_sec: @request_timeout_sec,
+        open_timeout_sec: @request_open_timeout_sec,
       })
     end
 
@@ -427,11 +437,11 @@ module Fluent
       end
 
       def insert(table_id, rows, template_suffix)
-        writer.insert_rows(@project, @dataset, table_id, rows, skip_invalid_rows: @skip_invalid_rows, ignore_unknown_values: @ignore_unknown_values, template_suffix: template_suffix, allow_retry_insert_errors: @allow_retry_insert_errors)
+        writer.insert_rows(@project, @dataset, table_id, rows, template_suffix: template_suffix)
       rescue Fluent::BigQuery::Error => e
         if @auto_create_table && e.status_code == 404 && /Not Found: Table/i =~ e.message
           # Table Not Found: Auto Create Table
-          writer.create_table(@project, @dataset, table_id, @fields, time_partitioning_type: @time_partitioning_type, time_partitioning_expiration: @time_partitioning_expiration)
+          writer.create_table(@project, @dataset, table_id, @fields)
           raise "table created. send rows next time."
         end
 
@@ -473,12 +483,7 @@ module Fluent
         res = nil
 
         create_upload_source(chunk) do |upload_source|
-          res = writer.create_load_job(chunk.unique_id, @project, @dataset, table_id, upload_source, @fields, {
-            prevent_duplicate_load: @prevent_duplicate_load,
-            ignore_unknown_values: @ignore_unknown_values, max_bad_records: @max_bad_records,
-            timeout_sec: @request_timeout_sec,  open_timeout_sec: @request_open_timeout_sec, auto_create_table: @auto_create_table,
-            time_partitioning_type: @time_partitioning_type, time_partitioning_expiration: @time_partitioning_expiration
-          })
+          res = writer.create_load_job(chunk.unique_id, @project, @dataset, table_id, upload_source, @fields)
         end
       rescue Fluent::BigQuery::Error => e
         if e.retryable?
