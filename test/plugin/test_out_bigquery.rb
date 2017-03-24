@@ -55,6 +55,21 @@ class BigQueryOutputTest < Test::Unit::TestCase
     writer
   end
 
+  # ref. https://github.com/GoogleCloudPlatform/google-cloud-ruby/blob/ea2be47beb32615b2bf69f8a846a684f86c8328c/google-cloud-bigquery/test/google/cloud/bigquery/table_insert_test.rb#L141
+  def failure_insert_errors(reason, error_count, insert_error_count)
+    error = Google::Apis::BigqueryV2::ErrorProto.new(
+      reason: reason
+    )
+    insert_error = Google::Apis::BigqueryV2::InsertAllTableDataResponse::InsertError.new(
+      errors: [].fill(error, 0, error_count)
+    )
+
+    res = Google::Apis::BigqueryV2::InsertAllTableDataResponse.new(
+      insert_errors: [].fill(insert_error, 0, insert_error_count)
+    )
+    return res
+  end
+
   def test_configure_table
     driver = create_driver
     assert_equal driver.instance.table, 'foo'
@@ -884,6 +899,143 @@ class BigQueryOutputTest < Test::Unit::TestCase
     driver.instance.start
     driver.instance.write(chunk)
     driver.instance.shutdown
+  end
+
+  def test_write_with_retryable_insert_errors
+    data_input = [
+      { "error_count" => 1,  "insert_error_count" => 1  },
+      { "error_count" => 10, "insert_error_count" => 1  },
+      { "error_count" => 10, "insert_error_count" => 10  },
+    ]
+
+    data_input.each do |d|
+      entry = {json: {a: "b"}}, {json: {b: "c"}}
+      allow_retry_insert_errors = true
+      driver = create_driver(<<-CONFIG)
+        table foo
+        email foo@bar.example
+        private_key_path /path/to/key
+        project yourproject_id
+        dataset yourdataset_id
+
+        allow_retry_insert_errors #{allow_retry_insert_errors}
+
+        time_format %s
+        time_field  time
+
+        schema [
+          {"name": "time", "type": "INTEGER"},
+          {"name": "status", "type": "INTEGER"},
+          {"name": "bytes", "type": "INTEGER"},
+          {"name": "vhost", "type": "STRING"},
+          {"name": "path", "type": "STRING"},
+          {"name": "method", "type": "STRING"},
+          {"name": "protocol", "type": "STRING"},
+          {"name": "agent", "type": "STRING"},
+          {"name": "referer", "type": "STRING"},
+          {"name": "remote", "type": "RECORD", "fields": [
+            {"name": "host", "type": "STRING"},
+            {"name": "ip", "type": "STRING"},
+            {"name": "user", "type": "STRING"}
+          ]},
+          {"name": "requesttime", "type": "FLOAT"},
+          {"name": "bot_access", "type": "BOOLEAN"},
+          {"name": "loginsession", "type": "BOOLEAN"}
+        ]
+        <secondary>
+          type file
+          path error
+          utc
+        </secondary>
+      CONFIG
+
+      writer = stub_writer(driver)
+      mock(writer.client).insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo', {
+        rows: entry,
+        skip_invalid_rows: false,
+        ignore_unknown_values: false
+      }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) do
+        s = failure_insert_errors("timeout", d["error_count"], d["insert_error_count"])
+        s
+      end
+
+      chunk = Fluent::MemoryBufferChunk.new("my.tag")
+      entry.each do |e|
+        chunk << e.to_msgpack
+      end
+
+      driver.instance.start
+      assert_raise Fluent::BigQuery::RetryableError do
+        driver.instance.write(chunk)
+      end
+      driver.instance.shutdown
+    end
+  end
+
+  def test_write_with_not_retryable_insert_errors
+    data_input = [
+      { "allow_retry_insert_errors" => false, "reason" => "timeout" },
+      { "allow_retry_insert_errors" => true,  "reason" => "stopped" },
+    ]
+    data_input.each do |d|
+      entry = {json: {a: "b"}}, {json: {b: "c"}}
+      driver = create_driver(<<-CONFIG)
+        table foo
+        email foo@bar.example
+        private_key_path /path/to/key
+        project yourproject_id
+        dataset yourdataset_id
+
+        allow_retry_insert_errors #{d["allow_retry_insert_errors"]}
+
+        time_format %s
+        time_field  time
+
+        schema [
+          {"name": "time", "type": "INTEGER"},
+          {"name": "status", "type": "INTEGER"},
+          {"name": "bytes", "type": "INTEGER"},
+          {"name": "vhost", "type": "STRING"},
+          {"name": "path", "type": "STRING"},
+          {"name": "method", "type": "STRING"},
+          {"name": "protocol", "type": "STRING"},
+          {"name": "agent", "type": "STRING"},
+          {"name": "referer", "type": "STRING"},
+          {"name": "remote", "type": "RECORD", "fields": [
+            {"name": "host", "type": "STRING"},
+            {"name": "ip", "type": "STRING"},
+            {"name": "user", "type": "STRING"}
+          ]},
+          {"name": "requesttime", "type": "FLOAT"},
+          {"name": "bot_access", "type": "BOOLEAN"},
+          {"name": "loginsession", "type": "BOOLEAN"}
+        ]
+        <secondary>
+          type file
+          path error
+          utc
+        </secondary>
+      CONFIG
+
+      writer = stub_writer(driver)
+      mock(writer.client).insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo', {
+        rows: entry,
+        skip_invalid_rows: false,
+        ignore_unknown_values: false
+      }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) do
+        s = failure_insert_errors(d["reason"], 1, 1)
+        s
+      end
+
+      chunk = Fluent::MemoryBufferChunk.new("my.tag")
+      entry.each do |e|
+        chunk << e.to_msgpack
+      end
+
+      driver.instance.start
+      driver.instance.write(chunk)
+      driver.instance.shutdown
+    end
   end
 
   def test_write_for_load

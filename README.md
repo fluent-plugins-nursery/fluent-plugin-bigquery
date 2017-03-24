@@ -17,6 +17,13 @@ OAuth flow for installed applications.
 ## Notice
 If you use ruby-2.1 or earlier, you must use activesupport-4.2.x or earlier.
 
+## With docker image
+If you use official alpine based fluentd docker image (https://github.com/fluent/fluentd-docker-image),
+You need to install `bigdecimal` gem on your own dockerfile.
+Because alpine based image has only minimal ruby environment in order to reduce image size.
+And in most case, dependency to embedded gem is not written on gemspec.
+Because embbeded gem dependency sometimes restricts ruby environment.
+
 ## Configuration
 
 ### Options
@@ -59,6 +66,7 @@ If you use ruby-2.1 or earlier, you must use activesupport-4.2.x or earlier.
 | replace_record_key_regexp{1-10}        | string        | no                                           | nil                                                    | see examples.                                                                                                        |
 | convert_hash_to_json (deprecated)      | bool          | no                                           | false                                                  | If true, converts Hash value of record to JSON String.                                                               |
 | insert_id_field                        | string        | no                                           | nil                                                    | Use key as `insert_id` of Streaming Insert API parameter.                                                            |
+| allow_retry_insert_errors              | bool          | no                                           | false                                                  | Retry to insert rows when an insertErrors occurs. There is a possibility that rows are inserted in duplicate.        |
 | request_timeout_sec                    | integer       | no                                           | nil                                                    | Bigquery API response timeout                                                                                        |
 | request_open_timeout_sec               | integer       | no                                           | 60                                                     | Bigquery API connection, and request timeout. If you send big data to Bigquery, set large value.                     |
 | time_partitioning_type                 | enum          | no (either day)                              | nil                                                    | Type of bigquery time partitioning feature(experimental feature on BigQuery).                                        |
