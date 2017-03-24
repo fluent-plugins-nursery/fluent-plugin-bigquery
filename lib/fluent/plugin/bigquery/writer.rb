@@ -95,7 +95,20 @@ module Fluent
           options: {timeout_sec: @options[:timeout_sec], open_timeout_sec: @options[:open_timeout_sec]}
         })
         log.debug "insert rows", project_id: project, dataset: dataset, table: table_id, count: rows.size
-        log.warn "insert errors", project_id: project, dataset: dataset, table: table_id, insert_errors: res.insert_errors.to_s if res.insert_errors && !res.insert_errors.empty?
+
+        if res.insert_errors && !res.insert_errors.empty?
+          log.warn "insert errors", project_id: project, dataset: dataset, table: table_id, insert_errors: res.insert_errors.to_s
+          if @options[:allow_retry_insert_errors]
+            is_included_any_retryable_insert_error = res.insert_errors.any? do |insert_error|
+              insert_error.errors.any? { |error| Fluent::BigQuery::Error.retryable_insert_errors_reason?(error.reason) }
+            end
+            if is_included_any_retryable_insert_error
+              raise Fluent::BigQuery::RetryableError.new("failed to insert into bigquery(insert errors), retry")
+            else
+              raise Fluent::BigQuery::UnRetryableError.new("failed to insert into bigquery(insert errors), and cannot retry")
+            end
+          end
+        end
       rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
         @client = nil
 

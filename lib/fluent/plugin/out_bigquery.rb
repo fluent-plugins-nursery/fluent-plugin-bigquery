@@ -120,6 +120,10 @@ module Fluent
 
       config_param :method, :enum, list: [:insert, :load], default: :insert, skip_accessor: true
 
+      # allow_retry_insert_errors (only insert)
+      # If insert_id_field is not specified, true means to allow duplicate rows
+      config_param :allow_retry_insert_errors, :bool, default: false
+
       # TODO
       # config_param :row_size_limit, :integer, default: 100*1000 # < 100KB # configurable in google ?
       # config_param :insert_size_limit, :integer, default: 1000**2 # < 1MB
@@ -270,6 +274,7 @@ module Fluent
           skip_invalid_rows: @skip_invalid_rows,
           ignore_unknown_values: @ignore_unknown_values,
           max_bad_records: @max_bad_records,
+          allow_retry_insert_errors: @allow_retry_insert_errors,
           prevent_duplicate_load: @prevent_duplicate_load,
           auto_create_table: @auto_create_table,
           time_partitioning_type: @time_partitioning_type,
