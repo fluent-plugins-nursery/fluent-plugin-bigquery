@@ -770,61 +770,61 @@ class BigQueryOutputTest < Test::Unit::TestCase
     ]
 
     data_input.each do |d|
-    driver = create_driver(<<-CONFIG)
-      table foo
-      email foo@bar.example
-      private_key_path /path/to/key
-      project yourproject_id
-      dataset yourdataset_id
+      driver = create_driver(<<-CONFIG)
+        table foo
+        email foo@bar.example
+        private_key_path /path/to/key
+        project yourproject_id
+        dataset yourdataset_id
 
-      <inject>
-      time_format %s
-      time_key  time
-      </inject>
+        <inject>
+        time_format %s
+        time_key  time
+        </inject>
 
-      schema [
-        {"name": "time", "type": "INTEGER"},
-        {"name": "status", "type": "INTEGER"},
-        {"name": "bytes", "type": "INTEGER"},
-        {"name": "vhost", "type": "STRING"},
-        {"name": "path", "type": "STRING"},
-        {"name": "method", "type": "STRING"},
-        {"name": "protocol", "type": "STRING"},
-        {"name": "agent", "type": "STRING"},
-        {"name": "referer", "type": "STRING"},
-        {"name": "remote", "type": "RECORD", "fields": [
-          {"name": "host", "type": "STRING"},
-          {"name": "ip", "type": "STRING"},
-          {"name": "user", "type": "STRING"}
-        ]},
-        {"name": "requesttime", "type": "FLOAT"},
-        {"name": "bot_access", "type": "BOOLEAN"},
-        {"name": "loginsession", "type": "BOOLEAN"}
-      ]
-      <secondary>
-        type file
-        path error
-        utc
-      </secondary>
-    CONFIG
+        schema [
+          {"name": "time", "type": "INTEGER"},
+          {"name": "status", "type": "INTEGER"},
+          {"name": "bytes", "type": "INTEGER"},
+          {"name": "vhost", "type": "STRING"},
+          {"name": "path", "type": "STRING"},
+          {"name": "method", "type": "STRING"},
+          {"name": "protocol", "type": "STRING"},
+          {"name": "agent", "type": "STRING"},
+          {"name": "referer", "type": "STRING"},
+          {"name": "remote", "type": "RECORD", "fields": [
+            {"name": "host", "type": "STRING"},
+            {"name": "ip", "type": "STRING"},
+            {"name": "user", "type": "STRING"}
+          ]},
+          {"name": "requesttime", "type": "FLOAT"},
+          {"name": "bot_access", "type": "BOOLEAN"},
+          {"name": "loginsession", "type": "BOOLEAN"}
+        ]
+        <secondary>
+          type file
+          path error
+          utc
+        </secondary>
+      CONFIG
 
-    entry = {a: "b"}
-    writer = stub_writer(driver)
-    mock(writer.client).insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo', {
-      rows: [{json: hash_including(entry)}],
-      skip_invalid_rows: false,
-      ignore_unknown_values: false
-    }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) do
-      ex = Google::Apis::ServerError.new("error", status_code: d["status_code"])
-      raise ex
-    end
+      entry = {a: "b"}
+      writer = stub_writer(driver)
+      mock(writer.client).insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo', {
+        rows: [{json: hash_including(entry)}],
+        skip_invalid_rows: false,
+        ignore_unknown_values: false
+      }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) do
+        ex = Google::Apis::ServerError.new("error", status_code: d["status_code"])
+        raise ex
+      end
 
-    assert_raise(Fluent::BigQuery::RetryableError) do
-      driver.run do
-        driver.feed("tag", Time.now.to_i, {"a" => "b"})
+      assert_raise(Fluent::BigQuery::RetryableError) do
+        driver.run do
+          driver.feed("tag", Time.now.to_i, {"a" => "b"})
+        end
       end
     end
-  end
   end
 
   def test_write_with_not_retryable_error
