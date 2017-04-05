@@ -113,9 +113,15 @@ module Fluent
         @client = nil
 
         reason = e.respond_to?(:reason) ? e.reason : nil
-        log.error "tabledata.insertAll API", project_id: project, dataset: dataset, table: table_id, code: e.status_code, message: e.message, reason: reason
+        error_data = { project_id: project, dataset: dataset, table: table_id, code: e.status_code, message: e.message, reason: reason }
+        wrapped = Fluent::BigQuery::Error.wrap(e)
+        if wrapped.retryable?
+          log.warn "tabledata.insertAll API", error_data
+        else
+          log.error "tabledata.insertAll API", error_data
+        end
 
-        raise Fluent::BigQuery::Error.wrap(e)
+        raise wrapped
       end
 
       def create_load_job(chunk_id, project, dataset, table_id, upload_source, fields)
