@@ -118,6 +118,12 @@ module Fluent
       # prevent_duplicate_load (only load)
       config_param :prevent_duplicate_load, :bool, default: false
 
+      # add_insert_timestamp (only insert)
+      # adds a timestamp just before sending the rows to bigquery, so that
+      # buffering time is not taken into account. Gives a field in bigquery
+      # which represents the insert time of the row.
+      config_param :add_insert_timestamp, :string, default: nil
+
       config_param :method, :enum, list: [:insert, :load], default: :insert, skip_accessor: true
 
       # allow_retry_insert_errors (only insert)
@@ -398,9 +404,11 @@ module Fluent
 
       module InsertImplementation
         def _write(chunk, table_format)
+          now = Time.now.utc.strftime("%Y-%m-%d %H:%M:%S.%6N") if @add_insert_timestamp
           rows = chunk.open do |io|
             io.map do |line|
               record = MultiJson.load(line)
+              record[@add_insert_timestamp] = now if @add_insert_timestamp
               row = {"json" => record}
               row["insert_id"] = @get_insert_id.call(record) if @get_insert_id
               row.deep_symbolize_keys
