@@ -2,6 +2,7 @@
 
 require 'fluent/plugin/bigquery/version'
 
+require 'fluent/plugin/bigquery/helper'
 require 'fluent/plugin/bigquery/errors'
 require 'fluent/plugin/bigquery/schema'
 require 'fluent/plugin/bigquery/writer'
@@ -174,9 +175,6 @@ module Fluent
         require 'multi_json'
         require 'google/apis/bigquery_v2'
         require 'googleauth'
-        require 'active_support/json'
-        require 'active_support/core_ext/hash'
-        require 'active_support/core_ext/object/json'
 
         # MEMO: signet-0.6.1 depend on Farady.default_connection
         Faraday.default_connection.options.timeout = 60
@@ -411,7 +409,7 @@ module Fluent
               record[@add_insert_timestamp] = now if @add_insert_timestamp
               row = {"json" => record}
               row["insert_id"] = @get_insert_id.call(record) if @get_insert_id
-              row.deep_symbolize_keys
+              Fluent::BigQuery::Helper.deep_symbolize_keys(row)
             end
           end
 
