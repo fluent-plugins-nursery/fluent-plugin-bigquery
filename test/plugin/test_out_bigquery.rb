@@ -481,7 +481,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
 
     writer = stub_writer(driver)
     mock(writer).fetch_schema('yourproject_id', 'yourdataset_id', 'foo') do
-      sudo_schema_response.deep_stringify_keys["schema"]["fields"]
+      sudo_schema_response["schema"]["fields"]
     end
 
     buf = nil
@@ -549,7 +549,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
 
     writer = stub_writer(driver)
     mock(writer).fetch_schema('yourproject_id', 'yourdataset_id', 'foo') do
-      sudo_schema_response.deep_stringify_keys["schema"]["fields"]
+      sudo_schema_response["schema"]["fields"]
     end
 
     buf = nil
@@ -913,7 +913,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
 
       buffer_type memory
     CONFIG
-    schema_fields = MultiJson.load(File.read(schema_path)).map(&:deep_symbolize_keys)
+    schema_fields = Fluent::BigQuery::Helper.deep_symbolize_keys(MultiJson.load(File.read(schema_path)))
 
     writer = stub_writer(driver)
     io = StringIO.new("hello")
@@ -969,7 +969,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
 
       buffer_type memory
     CONFIG
-    schema_fields = MultiJson.load(File.read(schema_path)).map(&:deep_symbolize_keys)
+    schema_fields = Fluent::BigQuery::Helper.deep_symbolize_keys(MultiJson.load(File.read(schema_path)))
 
     io = StringIO.new("hello")
     mock(driver.instance).create_upload_source(is_a(Fluent::Plugin::Buffer::Chunk)).yields(io)
@@ -1025,7 +1025,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
 
       buffer_type memory
     CONFIG
-    schema_fields = MultiJson.load(File.read(schema_path)).map(&:deep_symbolize_keys)
+    schema_fields = Fluent::BigQuery::Helper.deep_symbolize_keys(MultiJson.load(File.read(schema_path)))
 
     driver.instance_start
     tag, time, record = "tag", Time.now.to_i, {"a" => "b"}
@@ -1106,7 +1106,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
         utc
       </secondary>
     CONFIG
-    schema_fields = MultiJson.load(File.read(schema_path)).map(&:deep_symbolize_keys)
+    schema_fields = Fluent::BigQuery::Helper.deep_symbolize_keys(MultiJson.load(File.read(schema_path)))
 
     driver.instance_start
     tag, time, record = "tag", Time.now.to_i, {"a" => "b"}
@@ -1236,7 +1236,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       schema_path #{File.join(File.dirname(__FILE__), "testdata", "apache.schema")}
     CONFIG
     writer = stub_writer(driver)
-    mock(writer).insert_rows('yourproject_id', 'yourdataset_id', 'foo', [{json: message.deep_symbolize_keys}], template_suffix: nil) do
+    mock(writer).insert_rows('yourproject_id', 'yourdataset_id', 'foo', [{json: Fluent::BigQuery::Helper.deep_symbolize_keys(message)}], template_suffix: nil) do
       raise Fluent::BigQuery::RetryableError.new(nil, Google::Apis::ServerError.new("Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404, body: "Not found: Table yourproject_id:yourdataset_id.foo"))
     end
     mock(writer).create_table('yourproject_id', 'yourdataset_id', 'foo', driver.instance.instance_variable_get(:@table_schema))
@@ -1251,30 +1251,30 @@ class BigQueryOutputTest < Test::Unit::TestCase
   def test_auto_create_partitioned_table_by_bigquery_api
     now = Time.now
     message = {
-      "json" => {
-        "time" => now.to_i,
-        "request" => {
-          "vhost" => "bar",
-          "path" => "/path/to/baz",
-          "method" => "GET",
-          "protocol" => "HTTP/1.0",
-          "agent" => "libwww",
-          "referer" => "http://referer.example",
-          "time" => (now - 1).to_f,
-          "bot_access" => true,
-          "loginsession" => false,
+      json: {
+        time: now.to_i,
+        request: {
+          vhost: "bar",
+          path: "/path/to/baz",
+          method: "GET",
+          protocol: "HTTP/1.0",
+          agent: "libwww",
+          referer: "http://referer.example",
+          time: (now - 1).to_f,
+          bot_access: true,
+          loginsession: false,
         },
-        "remote" => {
-          "host" => "remote.example",
-          "ip" =>  "192.168.1.1",
-          "user" => "nagachika",
+        remote: {
+          host: "remote.example",
+          ip: "192.168.1.1",
+          user: "nagachika",
         },
-        "response" => {
-          "status" => 200,
-          "bytes" => 72,
+        response: {
+          status: 200,
+          bytes: 72,
         },
       }
-    }.deep_symbolize_keys
+    }
 
     driver = create_driver(<<-CONFIG)
       table foo
@@ -1309,32 +1309,32 @@ class BigQueryOutputTest < Test::Unit::TestCase
 
   def sudo_schema_response
     {
-      schema: {
-        fields: [
+      "schema" => {
+        "fields" => [
           {
-            name: "time",
-            type: "TIMESTAMP",
-            mode: "REQUIRED"
+            "name" => "time",
+            "type" => "TIMESTAMP",
+            "mode" => "REQUIRED"
           },
           {
-            name: "tty",
-            type: "STRING",
-            mode: "NULLABLE"
+            "name" => "tty",
+            "type" => "STRING",
+            "mode" => "NULLABLE"
           },
           {
-            name: "pwd",
-            type: "STRING",
-            mode: "REQUIRED"
+            "name" => "pwd",
+            "type" => "STRING",
+            "mode" => "REQUIRED"
           },
           {
-            name: "user",
-            type: "STRING",
-            mode: "REQUIRED"
+            "name" => "user",
+            "type" => "STRING",
+            "mode" => "REQUIRED"
           },
           {
-            name: "argv",
-            type: "STRING",
-            mode: "REPEATED"
+            "name" => "argv",
+            "type" => "STRING",
+            "mode" => "REPEATED"
           }
         ]
       }

@@ -1,7 +1,4 @@
 require 'helper'
-require 'active_support/json'
-require 'active_support/core_ext/hash'
-require 'active_support/core_ext/object/json'
 
 class RecordSchemaTest < Test::Unit::TestCase
   def base_schema
@@ -102,7 +99,7 @@ class RecordSchemaTest < Test::Unit::TestCase
   def test_load_schema
     fields = Fluent::BigQuery::RecordSchema.new("record")
     fields.load_schema(base_schema)
-    assert { fields.to_a.as_json == base_schema }
+    assert { Fluent::BigQuery::Helper.deep_stringify_keys(fields.to_a) == base_schema }
   end
 
   def test_load_schema_allow_overwrite_with_type_changed_column
@@ -110,7 +107,7 @@ class RecordSchemaTest < Test::Unit::TestCase
     fields.load_schema(base_schema)
 
     fields.load_schema(base_schema_with_type_changed_column)
-    assert { fields.to_a.as_json == base_schema_with_type_changed_column }
+    assert { Fluent::BigQuery::Helper.deep_stringify_keys(fields.to_a) == base_schema_with_type_changed_column }
   end
 
   def test_load_schema_allow_overwrite_with_new_column
@@ -118,7 +115,7 @@ class RecordSchemaTest < Test::Unit::TestCase
     fields.load_schema(base_schema)
 
     fields.load_schema(base_schema_with_new_column)
-    assert { fields.to_a.as_json == base_schema_with_new_column }
+    assert { Fluent::BigQuery::Helper.deep_stringify_keys(fields.to_a) == base_schema_with_new_column }
   end
 
   def test_format_one

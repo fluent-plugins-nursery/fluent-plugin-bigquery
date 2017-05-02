@@ -42,7 +42,7 @@ module Fluent
             definition[:time_partitioning] = {
               type: @options[:time_partitioning_type].to_s.upcase,
               expiration_ms: @options[:time_partitioning_expiration] ? @options[:time_partitioning_expiration] * 1000 : nil
-            }.compact
+            }.select { |_, value| !value.nil? }
           end
           client.insert_table(project, dataset, definition, {})
           log.debug "create table", project_id: project, dataset: dataset, table: table_id
@@ -73,7 +73,7 @@ module Fluent
 
       def fetch_schema(project, dataset, table_id)
         res = client.get_table(project, dataset, table_id)
-        schema = res.schema.fields.as_json
+        schema = Fluent::BigQuery::Helper.deep_stringify_keys(res.schema.to_h[:fields])
         log.debug "Load schema from BigQuery: #{project}:#{dataset}.#{table_id} #{schema}"
 
         schema
