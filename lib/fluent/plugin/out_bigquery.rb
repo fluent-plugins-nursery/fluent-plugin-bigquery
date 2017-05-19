@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+require 'fluent/plugin/output'
+
 require 'fluent/plugin/bigquery/version'
 
 require 'fluent/plugin/bigquery/helper'
