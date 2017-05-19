@@ -15,7 +15,6 @@ require 'google/apis/bigquery_v2'
 require 'google/api_client/auth/key_utils'
 require 'googleauth'
 
-require 'rr'
 require 'test/unit/rr'
 
 class Test::Unit::TestCase
