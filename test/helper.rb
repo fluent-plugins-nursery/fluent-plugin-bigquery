@@ -16,6 +16,3 @@ require 'google/api_client/auth/key_utils'
 require 'googleauth'
 
 require 'test/unit/rr'
-
-class Test::Unit::TestCase
-end
