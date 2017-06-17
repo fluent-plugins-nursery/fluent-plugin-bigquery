@@ -224,23 +224,9 @@ module Fluent
 
       @tablelist = @tables ? @tables.split(',') : [@table]
 
-      legacy_schema_config_deprecation
-      @fields = Fluent::BigQuery::RecordSchema.new('record')
-      if @schema
-        @fields.load_schema(@schema)
-      end
-      if @schema_path
-        @fields.load_schema(MultiJson.load(File.read(@schema_path)))
-      end
 
-      types = %w(string integer float boolean timestamp)
-      types.each do |type|
-        raw_fields = instance_variable_get("@field_#{type}")
-        next unless raw_fields
-        raw_fields.split(',').each do |field|
-          @fields.register_field field.strip, type.to_sym
-        end
-      end
+      legacy_schema_config_deprecation
+      load_schema_config
 
       @regexps = {}
       (1..REGEXP_MAX_NUM).each do |i|
@@ -360,6 +346,27 @@ module Fluent
       if [@field_string, @field_integer, @field_float, @field_boolean, @field_timestamp].any?
         warn "[DEPRECATION] `field_*` style schema config is deprecated. Instead of it, use `schema` config params that is array of json style."
       end
+    end
+
+    def load_schema_config
+      fields = Fluent::BigQuery::RecordSchema.new('record')
+      if @schema
+        fields.load_schema(@schema)
+      end
+      if @schema_path
+        fields.load_schema(MultiJson.load(File.read(@schema_path)))
+      end
+
+      types = %w(string integer float boolean timestamp)
+      types.each do |type|
+        raw_fields = instance_variable_get("@field_#{type}")
+        next unless raw_fields
+        raw_fields.split(',').each do |field|
+          fields.register_field field.strip, type.to_sym
+        end
+      end
+
+      @fields = fields
     end
 
     def write(chunk)
