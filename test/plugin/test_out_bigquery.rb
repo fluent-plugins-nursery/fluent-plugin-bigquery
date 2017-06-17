@@ -10,7 +10,17 @@ require 'active_support/core_ext/object/json'
 class BigQueryOutputTest < Test::Unit::TestCase
   def setup
     Fluent::Test.setup
+    FileUtils.rm_rf(TMP_DIR, secure: true)
+    FileUtils.mkdir(TMP_DIR)
   end
+
+  def teardown
+    super
+    Fluent::Engine.stop
+    FileUtils.rm_rf(TMP_DIR, secure: true)
+  end
+
+  TMP_DIR = File.dirname(__FILE__) + "/testdata/tmp"
 
   CONFIG = %[
     table foo
@@ -81,6 +91,19 @@ class BigQueryOutputTest < Test::Unit::TestCase
 
     assert_raise(Fluent::ConfigError, "'table' or 'tables' must be specified, and both are invalid") {
       create_driver(CONFIG + "tables foo,bar")
+    }
+  end
+
+  def test_configure_watch_schema_path
+    driver = create_driver(CONFIG)
+    assert_equal driver.instance.watch_schema_path, false
+
+    schema_path = File.join(File.dirname(__FILE__), "testdata", "apache.schema")
+    driver = create_driver(CONFIG + "schema_path #{schema_path}\nwatch_schema_path true")
+    assert_equal driver.instance.watch_schema_path, true
+
+    assert_raise(Fluent::ConfigError, "'watch_schema_path' must be specified with schema_path") {
+      create_driver(CONFIG + "watch_schema_path true")
     }
   end
 
@@ -410,6 +433,108 @@ class BigQueryOutputTest < Test::Unit::TestCase
     driver.instance.shutdown
 
     assert_equal expected, MessagePack.unpack(buf)
+  end
+
+  def test_watch_schema_path
+    create_schema = drop_column_to_schema = -> {
+      File.open("#{TMP_DIR}/schema.json", "wb") {|f|
+        f.puts <<-SCHEMA
+        [
+            { "name":"code", "type":"integer" }
+        ]
+        SCHEMA
+      }
+    }
+    create_schema.call
+
+    add_column_to_schema = -> {
+      File.open("#{TMP_DIR}/schema.json", "wb") {|f|
+        f.puts <<-SCHEMA
+        [
+            { "name":"code", "type":"integer" },
+            { "name":"params", "type":"string" }
+        ]
+        SCHEMA
+      }
+    }
+
+    delete_schema = -> {
+      File.delete("#{TMP_DIR}/schema.json")
+    }
+
+    change_invalid_schema = -> {
+      File.open("#{TMP_DIR}/schema.json", "wb") {|f|
+        f.puts <<-SCHEMA
+        [
+            { "name":"code", "type":"integer" },,,,
+        ]
+        SCHEMA
+      }
+    }
+
+    now = Time.now
+    input = [
+      now,
+      {
+        "code" => 1,
+        "params" => { "paramA" => 1, "paramB" => 2 },
+      }
+    ]
+    expected_before_add = {
+      "json" => {
+        "time" => now.to_i,
+        "code" => 1,
+        "params" => { "paramA" => 1, "paramB" => 2 },
+      }
+    }
+    expected_after_add = {
+      "json" => {
+        "time" => now.to_i,
+        "code" => 1,
+        "params" => input[1]["params"].to_json,
+      }
+    }
+
+    driver = create_driver(<<-CONFIG)
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      time_format %s
+      time_field  time
+      schema [{"name": "time", "type": "INTEGER"}]
+
+      schema_path #{TMP_DIR}/schema.json
+      watch_schema_path true
+    CONFIG
+    driver.instance.start
+
+    [
+      [ nil, expected_before_add],
+      # Add a column. Changed
+      [ add_column_to_schema, expected_after_add],
+      # Drop a column. Changed
+      [ drop_column_to_schema, expected_before_add],
+      # Delete a file. Unchanged.
+      [ delete_schema, expected_before_add],
+      # Create a same file. Unchanged.
+      [ create_schema, expected_before_add],
+      # Delete and create a changed file. Changed.
+      [ -> {delete_schema.call; add_column_to_schema.call}, expected_after_add],
+      # Change invalid schema. Unchanged.
+      [ change_invalid_schema, expected_after_add],
+    ].each do |apply_schema, expected|
+      if apply_schema
+        apply_schema.call
+        sleep 10
+      end
+      buf = driver.instance.format_stream("my.tag", [input])
+      assert_equal expected, MessagePack.unpack(buf)
+    end
+
+    driver.instance.shutdown
   end
 
   def test_format_fetch_from_bigquery_api
