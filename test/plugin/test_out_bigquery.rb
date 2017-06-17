@@ -1402,7 +1402,6 @@ class BigQueryOutputTest < Test::Unit::TestCase
   def test_generate_table_id_with_attribute_replacement
     driver = create_driver
     table_id_format = 'foo_%Y_%m_%d_${baz}'
-    current_time = Time.now
     time = Time.local(2014, 8, 11, 21, 20, 56)
     [
       [ { baz: 1234 },         'foo_2014_08_11_1234' ],
