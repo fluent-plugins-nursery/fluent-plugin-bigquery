@@ -9,6 +9,8 @@ require 'fluent/plugin/bigquery/errors'
 require 'fluent/plugin/bigquery/schema'
 require 'fluent/plugin/bigquery/writer'
 
+require 'cool.io'
+
 ## TODO: load implementation
 # require 'fluent/plugin/bigquery/load_request_body_wrapper'
 
@@ -89,6 +91,7 @@ module Fluent
 
     config_param :schema, :array, default: nil
     config_param :schema_path, :string, default: nil
+    config_param :watch_schema_path, :bool, default: false
     config_param :fetch_schema, :bool, default: false
     config_param :fetch_schema_table, :string, default: nil
     config_param :schema_cache_expire, :time, default: 600
@@ -224,23 +227,12 @@ module Fluent
 
       @tablelist = @tables ? @tables.split(',') : [@table]
 
-      legacy_schema_config_deprecation
-      @fields = Fluent::BigQuery::RecordSchema.new('record')
-      if @schema
-        @fields.load_schema(@schema)
-      end
-      if @schema_path
-        @fields.load_schema(MultiJson.load(File.read(@schema_path)))
+      if @watch_schema_path && !@schema_path
+        raise Fluent::ConfigError, "'watch_schema_path' must be specified with schema_path"
       end
 
-      types = %w(string integer float boolean timestamp)
-      types.each do |type|
-        raw_fields = instance_variable_get("@field_#{type}")
-        next unless raw_fields
-        raw_fields.split(',').each do |field|
-          @fields.register_field field.strip, type.to_sym
-        end
-      end
+      legacy_schema_config_deprecation
+      load_schema_config
 
       @regexps = {}
       (1..REGEXP_MAX_NUM).each do |i|
@@ -287,6 +279,43 @@ module Fluent
 
       @last_fetch_schema_time = 0
       fetch_schema(false) if @fetch_schema
+
+      if @schema_path && @watch_schema_path
+        @loop = Cool.io::Loop.new
+        watcher = SchemaStatWatcher.new @schema_path, log do
+          begin
+            load_schema_config
+            @log.info "schema_path change applied."
+          rescue => e
+            @log.error "schema_path change apply failed #{e}"
+            @log.warn "uses previous schema_path"
+          end
+        end
+        @loop.attach(watcher)
+        @thread = Thread.new do
+          begin
+            @loop.run(0.5)
+          rescue
+            log.error "unexpected error #{$!.to_s}"
+          end
+        end
+      end
+    end
+
+    def shutdown
+      if @loop
+        @loop.watchers.each do |w|
+          begin
+            w.detach
+          rescue => e
+            log.error "unexpected error while detaching event loop watcher #{e}"
+          end
+        end
+        @loop.stop rescue nil # when all watchers are detached, `stop` raises RuntimeError. We can ignore this exception.
+        @thread.join if @thread
+      end
+
+      super
     end
 
     def writer
@@ -360,6 +389,27 @@ module Fluent
       if [@field_string, @field_integer, @field_float, @field_boolean, @field_timestamp].any?
         warn "[DEPRECATION] `field_*` style schema config is deprecated. Instead of it, use `schema` config params that is array of json style."
       end
+    end
+
+    def load_schema_config
+      fields = Fluent::BigQuery::RecordSchema.new('record')
+      if @schema
+        fields.load_schema(@schema)
+      end
+      if @schema_path
+        fields.load_schema(MultiJson.load(File.read(@schema_path)))
+      end
+
+      types = %w(string integer float boolean timestamp)
+      types.each do |type|
+        raw_fields = instance_variable_get("@field_#{type}")
+        next unless raw_fields
+        raw_fields.split(',').each do |field|
+          fields.register_field field.strip, type.to_sym
+        end
+      end
+
+      @fields = fields
     end
 
     def write(chunk)
@@ -518,6 +568,23 @@ module Fluent
             yield file
           end
         end
+      end
+    end
+    class SchemaStatWatcher < Coolio::StatWatcher
+      def initialize(path, log, &callback)
+        @log = log
+        @callback = callback
+        super(path)
+      end
+
+      def on_change(previous, current)
+        @log.debug "schema_path change detected."
+        if 0 < current.nlink && previous.size != current.size
+          @callback.call
+        end
+      rescue
+        @log.error $!.to_s
+        @log.error_backtrace
       end
     end
   end
