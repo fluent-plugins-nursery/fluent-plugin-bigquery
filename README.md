@@ -2,7 +2,7 @@
 
 [Fluentd](http://fluentd.org) output plugin to load/insert data into Google BigQuery.
 
-- **Plugin type**: TimeSlicedOutput
+- **Plugin type**: BufferedOutput
 
 * insert data over streaming inserts
   * for continuous real-time insertions
@@ -13,6 +13,12 @@
 
 Current version of this plugin supports Google API with Service Account Authentication, but does not support
 OAuth flow for installed applications.
+
+## Version Information
+v1.0.0 or later supports fluentd-0.14.0 or later.
+If you use fluentd-0.12.x, please use v0.4.x.
+
+I recommend to update fluentd version to v0.14.x or later.
 
 ## With docker image
 If you use official alpine based fluentd docker image (https://github.com/fluent/fluentd-docker-image),
