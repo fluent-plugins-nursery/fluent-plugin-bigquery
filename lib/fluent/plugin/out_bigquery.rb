@@ -104,8 +104,6 @@ module Fluent
       config_param :replace_record_key, :bool, default: false
       (1..REGEXP_MAX_NUM).each {|i| config_param :"replace_record_key_regexp#{i}", :string, default: nil }
 
-      config_param :convert_hash_to_json, :bool, default: false
-
       # insert_id_field (only insert)
       config_param :insert_id_field, :string, default: nil
       # prevent_duplicate_load (only load)
@@ -239,8 +237,6 @@ module Fluent
 
         placeholder_params = "project=#{@project}/dataset=#{@dataset}/table=#{@tablelist.join(",")}/fetch_schema_table=#{@fetch_schema_table}/template_suffix=#{@template_suffix}"
         placeholder_validate!(:bigquery, placeholder_params)
-
-        warn "[DEPRECATION] `convert_hash_to_json` param is deprecated. If Hash value is inserted string field, plugin convert it to json automatically." if @convert_hash_to_json
       end
 
       def start
@@ -283,22 +279,9 @@ module Fluent
         new_record
       end
 
-      def convert_hash_to_json(record)
-        record.each do |key, value|
-          if value.class == Hash
-            record[key] = MultiJson.dump(value)
-          end
-        end
-        record
-      end
-
       def format(tag, time, record)
         if @replace_record_key
           record = replace_record_key(record)
-        end
-
-        if @convert_hash_to_json
-          record = convert_hash_to_json(record)
         end
 
         record = inject_values_to_record(tag, time, record)
