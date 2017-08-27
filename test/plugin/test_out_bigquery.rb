@@ -282,18 +282,18 @@ class BigQueryOutputTest < Test::Unit::TestCase
   [
     # <time_format>, <time field type>, <time expectation generator>, <assertion>
     [
-      "%s.%6N", "field_float",
+      "%s.%6N",
       lambda{|t| t.strftime("%s.%6N").to_f },
       lambda{|recv, expected, actual|
         recv.assert_in_delta(expected, actual, Float::EPSILON / 10**3)
       }
     ],
     [
-      "%Y-%m-%dT%H:%M:%S%:z", "field_string",
+      "%Y-%m-%dT%H:%M:%S%:z",
       lambda{|t| t.iso8601 },
       :assert_equal.to_proc
     ],
-  ].each do |format, type, expect_time, assert|
+  ].each do |format, expect_time, assert|
     define_method("test_time_formats_#{format}") do
       now = Fluent::Engine.now
       input = {}
@@ -311,7 +311,6 @@ class BigQueryOutputTest < Test::Unit::TestCase
         time_type string
         time_key  time
         </inject>
-        #{type}     time
 
         schema [
           {"name": "metadata", "type": "RECORD", "fields": [
@@ -680,58 +679,6 @@ class BigQueryOutputTest < Test::Unit::TestCase
         {"name": "refere", "type": "STRING"},
         {"name": "bot_access", "type": "BOOLEAN"},
         {"name": "login_session", "type": "BOOLEAN"}
-      ]
-    CONFIG
-
-    buf = nil
-    driver.run { buf = driver.instance.format("my.tag", now, input) }
-
-    assert_equal expected, MultiJson.load(buf)
-  end
-
-  def test_convert_hash_to_json
-    now = Fluent::EventTime.now
-    input = {
-      "vhost" => :bar,
-      "referer" => "http://referer.example",
-      "bot_access" => true,
-      "loginsession" => false,
-      "remote" => {
-        "host" => "remote.example",
-        "ip" => "192.0.2.1",
-        "port" => 12345,
-        "user" => "tagomoris",
-      }
-    }
-    expected = {
-      "time" => now.to_i,
-      "vhost" => "bar",
-      "referer" => "http://referer.example",
-      "bot_access" => true,
-      "loginsession" => false,
-      "remote" => "{\"host\":\"remote.example\",\"ip\":\"192.0.2.1\",\"port\":12345,\"user\":\"tagomoris\"}"
-    }
-
-    driver = create_driver(<<-CONFIG)
-      table foo
-      email foo@bar.example
-      private_key_path /path/to/key
-      project yourproject_id
-      dataset yourdataset_id
-
-      convert_hash_to_json true
-
-      <inject>
-      time_format %s
-      time_key time
-      </inject>
-
-      schema [
-        {"name": "time", "type": "INTEGER"},
-        {"name": "vhost", "type": "STRING"},
-        {"name": "refere", "type": "STRING"},
-        {"name": "bot_access", "type": "BOOLEAN"},
-        {"name": "loginsession", "type": "BOOLEAN"}
       ]
     CONFIG
 

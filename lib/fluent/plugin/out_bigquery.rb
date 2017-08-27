@@ -99,22 +99,10 @@ module Fluent
       config_param :fetch_schema, :bool, default: false
       config_param :fetch_schema_table, :string, default: nil
       config_param :schema_cache_expire, :time, default: 600
-      config_param :field_string,    :array, value_type: :string, default: nil
-      config_param :field_integer,   :array, value_type: :string, default: nil
-      config_param :field_float,     :array, value_type: :string, default: nil
-      config_param :field_boolean,   :array, value_type: :string, default: nil
-      config_param :field_timestamp, :array, value_type: :string, default: nil
-      ### TODO: record field stream inserts doesn't works well?
-      ###  At table creation, table type json + field type record -> field type validation fails
-      ###  At streaming inserts, schema cannot be specified
-      # config_param :field_record,  :string, defualt: nil
-      # config_param :optional_data_field, :string, default: nil
 
       REGEXP_MAX_NUM = 10
       config_param :replace_record_key, :bool, default: false
       (1..REGEXP_MAX_NUM).each {|i| config_param :"replace_record_key_regexp#{i}", :string, default: nil }
-
-      config_param :convert_hash_to_json, :bool, default: false
 
       # insert_id_field (only insert)
       config_param :insert_id_field, :string, default: nil
@@ -221,22 +209,12 @@ module Fluent
 
         @tablelist = @tables ? @tables : [@table]
 
-        legacy_schema_config_deprecation
         @table_schema = Fluent::BigQuery::RecordSchema.new('record')
         if @schema
           @table_schema.load_schema(@schema)
         end
         if @schema_path
           @table_schema.load_schema(MultiJson.load(File.read(@schema_path)))
-        end
-
-        types = %i(string integer float boolean timestamp)
-        types.each do |type|
-          fields = instance_variable_get("@field_#{type}")
-          next unless fields
-          fields.each do |field|
-            @table_schema.register_field field, type
-          end
         end
 
         @regexps = {}
@@ -259,8 +237,6 @@ module Fluent
 
         placeholder_params = "project=#{@project}/dataset=#{@dataset}/table=#{@tablelist.join(",")}/fetch_schema_table=#{@fetch_schema_table}/template_suffix=#{@template_suffix}"
         placeholder_validate!(:bigquery, placeholder_params)
-
-        warn "[DEPRECATION] `convert_hash_to_json` param is deprecated. If Hash value is inserted string field, plugin convert it to json automatically." if @convert_hash_to_json
       end
 
       def start
@@ -307,22 +283,9 @@ module Fluent
         new_record
       end
 
-      def convert_hash_to_json(record)
-        record.each do |key, value|
-          if value.class == Hash
-            record[key] = MultiJson.dump(value)
-          end
-        end
-        record
-      end
-
       def format(tag, time, record)
         if @replace_record_key
           record = replace_record_key(record)
-        end
-
-        if @convert_hash_to_json
-          record = convert_hash_to_json(record)
         end
 
         record = inject_values_to_record(tag, time, record)
@@ -359,12 +322,6 @@ module Fluent
           t
         end
         _write(chunk, table_id_format)
-      end
-
-      def legacy_schema_config_deprecation
-        if [@field_string, @field_integer, @field_float, @field_boolean, @field_timestamp].any?
-          warn "[DEPRECATION] `field_*` style schema config is deprecated. Instead of it, use `schema` config params that is array of json style."
-        end
       end
 
       def fetch_schema(metadata)
