@@ -108,6 +108,24 @@ For example.
 
 see. https://github.com/fluent/fluentd/blob/master/lib/fluent/plugin_helper/inject.rb
 
+### Formatter section
+
+This section is for `load` mode only.
+If you use `insert` mode, used formatter is `json` only.
+
+Bigquery supports `csv`, `json` and `avro` format. Default is `json`
+I recommend to use `json` for now.
+
+For example.
+
+```
+<format>
+  @type json
+</format>
+```
+
+see. https://github.com/fluent/fluentd/blob/master/lib/fluent/plugin_helper/formatter.rb
+
 ## Examples
 
 ### Streaming inserts

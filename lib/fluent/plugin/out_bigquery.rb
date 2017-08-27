@@ -14,7 +14,7 @@ module Fluent
     class BigQueryOutput < Output
       Fluent::Plugin.register_output('bigquery', self)
 
-      helpers :inject
+      helpers :inject, :formatter
 
       # https://developers.google.com/bigquery/browser-tool-quickstart
       # https://developers.google.com/bigquery/bigquery-api-quickstart
@@ -23,21 +23,32 @@ module Fluent
       def configure_for_insert(conf)
         raise ConfigError unless conf["method"].nil? || conf["method"] == "insert"
 
+        formatter_config = conf.elements("format")[0]
+        if formatter_config && formatter_config['@type'] != "json"
+          log.warn "`insert` mode supports only json formatter."
+          formatter_config['@type'] = nil
+        end
+        @formatter = formatter_create(usage: 'out_bigquery_for_insert', type: 'json', conf: formatter_config)
+
         buffer_config = conf.elements("buffer")[0]
-        return unless buffer_config
-        buffer_config["@type"]                       = "memory"      unless buffer_config["@type"]
-        buffer_config["flush_mode"]                  = :interval     unless buffer_config["flush_mode"]
-        buffer_config["flush_interval"]              = 0.25          unless buffer_config["flush_interval"]
-        buffer_config["flush_thread_interval"]       = 0.05          unless buffer_config["flush_thread_interval"]
-        buffer_config["flush_thread_burst_interval"] = 0.05          unless buffer_config["flush_thread_burst_interval"]
-        buffer_config["chunk_limit_size"]            = 1 * 1024 ** 2 unless buffer_config["chunk_limit_size"] # 1MB
-        buffer_config["total_limit_size"]            = 1 * 1024 ** 3 unless buffer_config["total_limit_size"] # 1GB
-        buffer_config["chunk_records_limit"]         = 500           unless buffer_config["chunk_records_limit"]
+        if buffer_config
+          buffer_config["@type"]                       = "memory"      unless buffer_config["@type"]
+          buffer_config["flush_mode"]                  = :interval     unless buffer_config["flush_mode"]
+          buffer_config["flush_interval"]              = 0.25          unless buffer_config["flush_interval"]
+          buffer_config["flush_thread_interval"]       = 0.05          unless buffer_config["flush_thread_interval"]
+          buffer_config["flush_thread_burst_interval"] = 0.05          unless buffer_config["flush_thread_burst_interval"]
+          buffer_config["chunk_limit_size"]            = 1 * 1024 ** 2 unless buffer_config["chunk_limit_size"] # 1MB
+          buffer_config["total_limit_size"]            = 1 * 1024 ** 3 unless buffer_config["total_limit_size"] # 1GB
+          buffer_config["chunk_records_limit"]         = 500           unless buffer_config["chunk_records_limit"]
+        end
       end
 
       ### default for loads
       def configure_for_load(conf)
         raise ConfigError unless conf["method"] == "load"
+
+        formatter_config = conf.elements("format")[0]
+        @formatter = formatter_create(usage: 'out_bigquery_for_load', conf: formatter_config, default_type: 'json')
 
         buffer_config = conf.elements("buffer")[0]
         return unless buffer_config
@@ -145,6 +156,11 @@ module Fluent
       config_param :time_partitioning_type, :enum, list: [:day], default: nil
       config_param :time_partitioning_expiration, :time, default: nil
 
+      ## Formatter
+      config_section :format do
+        config_set_default :@type, 'json'
+      end
+
       ### Table types
       # https://developers.google.com/bigquery/docs/tables
       #
@@ -248,10 +264,6 @@ module Fluent
         @last_fetch_schema_time = Hash.new(0)
       end
 
-      def multi_workers_ready?
-        true
-      end
-
       def writer
         @writer ||= Fluent::BigQuery::Writer.new(@log, @auth_method, {
           private_key_path: @private_key_path, private_key_passphrase: @private_key_passphrase,
@@ -303,12 +315,9 @@ module Fluent
         end
 
         begin
-          buf = String.new
           row = schema.format(record)
-          unless row.empty?
-            buf << MultiJson.dump(row) + "\n"
-          end
-          buf
+          return if row.empty?
+          @formatter.format(tag, time, row)
         rescue
           log.error("format error", record: record, schema: schema)
           raise
