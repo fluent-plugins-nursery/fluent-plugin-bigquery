@@ -282,18 +282,18 @@ class BigQueryOutputTest < Test::Unit::TestCase
   [
     # <time_format>, <time field type>, <time expectation generator>, <assertion>
     [
-      "%s.%6N", "field_float",
+      "%s.%6N",
       lambda{|t| t.strftime("%s.%6N").to_f },
       lambda{|recv, expected, actual|
         recv.assert_in_delta(expected, actual, Float::EPSILON / 10**3)
       }
     ],
     [
-      "%Y-%m-%dT%H:%M:%S%:z", "field_string",
+      "%Y-%m-%dT%H:%M:%S%:z",
       lambda{|t| t.iso8601 },
       :assert_equal.to_proc
     ],
-  ].each do |format, type, expect_time, assert|
+  ].each do |format, expect_time, assert|
     define_method("test_time_formats_#{format}") do
       now = Fluent::Engine.now
       input = {}
@@ -311,7 +311,6 @@ class BigQueryOutputTest < Test::Unit::TestCase
         time_type string
         time_key  time
         </inject>
-        #{type}     time
 
         schema [
           {"name": "metadata", "type": "RECORD", "fields": [

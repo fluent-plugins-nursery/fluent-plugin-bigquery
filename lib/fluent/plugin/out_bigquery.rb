@@ -99,16 +99,6 @@ module Fluent
       config_param :fetch_schema, :bool, default: false
       config_param :fetch_schema_table, :string, default: nil
       config_param :schema_cache_expire, :time, default: 600
-      config_param :field_string,    :array, value_type: :string, default: nil
-      config_param :field_integer,   :array, value_type: :string, default: nil
-      config_param :field_float,     :array, value_type: :string, default: nil
-      config_param :field_boolean,   :array, value_type: :string, default: nil
-      config_param :field_timestamp, :array, value_type: :string, default: nil
-      ### TODO: record field stream inserts doesn't works well?
-      ###  At table creation, table type json + field type record -> field type validation fails
-      ###  At streaming inserts, schema cannot be specified
-      # config_param :field_record,  :string, defualt: nil
-      # config_param :optional_data_field, :string, default: nil
 
       REGEXP_MAX_NUM = 10
       config_param :replace_record_key, :bool, default: false
@@ -221,22 +211,12 @@ module Fluent
 
         @tablelist = @tables ? @tables : [@table]
 
-        legacy_schema_config_deprecation
         @table_schema = Fluent::BigQuery::RecordSchema.new('record')
         if @schema
           @table_schema.load_schema(@schema)
         end
         if @schema_path
           @table_schema.load_schema(MultiJson.load(File.read(@schema_path)))
-        end
-
-        types = %i(string integer float boolean timestamp)
-        types.each do |type|
-          fields = instance_variable_get("@field_#{type}")
-          next unless fields
-          fields.each do |field|
-            @table_schema.register_field field, type
-          end
         end
 
         @regexps = {}
@@ -355,12 +335,6 @@ module Fluent
           t
         end
         _write(chunk, table_id_format)
-      end
-
-      def legacy_schema_config_deprecation
-        if [@field_string, @field_integer, @field_float, @field_boolean, @field_timestamp].any?
-          warn "[DEPRECATION] `field_*` style schema config is deprecated. Instead of it, use `schema` config params that is array of json style."
-        end
       end
 
       def fetch_schema(metadata)
