@@ -255,7 +255,7 @@ module Fluent
       end
 
       def writer
-        @writer ||= Fluent::BigQuery::Writer.new(@log, @auth_method, {
+        Thread.current["bigquery_writer"] ||= Fluent::BigQuery::Writer.new(@log, @auth_method, {
           private_key_path: @private_key_path, private_key_passphrase: @private_key_passphrase,
           email: @email,
           json_key: @json_key,
@@ -292,17 +292,13 @@ module Fluent
 
         record = inject_values_to_record(tag, time, record)
 
-        begin
-          meta = metadata(tag, time, record)
-          schema =
-            if @fetch_schema
-              fetch_schema(meta)
-            else
-              @table_schema
-            end
-        ensure
-          @buffer.metadata_list.delete(meta)
-        end
+        meta = metadata(tag, time, record)
+        schema =
+          if @fetch_schema
+            fetch_schema(meta)
+          else
+            @table_schema
+          end
 
         begin
           buf = String.new
