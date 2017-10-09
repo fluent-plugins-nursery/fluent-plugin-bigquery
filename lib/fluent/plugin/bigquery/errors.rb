@@ -3,7 +3,7 @@ module Fluent
     # @abstract
     class Error < StandardError
       RETRYABLE_ERROR_REASON = %w(backendError internalError rateLimitExceeded tableUnavailable).freeze
-      RETRYABLE_INSERT_ERRORS_REASON = %w(timeout).freeze
+      RETRYABLE_INSERT_ERRORS_REASON = %w(timeout backendError internalError rateLimitExceeded).freeze
       RETRYABLE_STATUS_CODE = [500, 502, 503, 504]
 
       class << self
