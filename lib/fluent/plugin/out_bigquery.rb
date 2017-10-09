@@ -217,6 +217,8 @@ module Fluent
           @table_schema.load_schema(MultiJson.load(File.read(@schema_path)))
         end
 
+        warn "[DEPRECATION] `replace_record_key` param is deprecated. Please use filter_record_transformer or fluent-plugin-record-reformer" if @replace_record_key
+
         @regexps = {}
         (1..REGEXP_MAX_NUM).each do |i|
           next unless conf["replace_record_key_regexp#{i}"]
