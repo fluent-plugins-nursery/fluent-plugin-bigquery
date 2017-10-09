@@ -44,10 +44,12 @@ class BigQueryOutputTest < Test::Unit::TestCase
     Fluent::Test::Driver::Output.new(Fluent::Plugin::BigQueryOutput).configure(conf)
   end
 
-  def stub_writer(driver)
-    writer = driver.instance.writer
-    stub(writer).get_auth { nil }
-    writer
+  def stub_writer(driver, stub_auth: true)
+    stub.proxy(Fluent::BigQuery::Writer).new.with_any_args do |writer|
+      stub(writer).get_auth { nil } if stub_auth
+      yield writer
+      writer
+    end
   end
 
   def test_configure_table
@@ -65,37 +67,14 @@ class BigQueryOutputTest < Test::Unit::TestCase
   end
 
   def test_configure_auth_private_key
-    key = stub!
-    mock(Google::APIClient::KeyUtils).load_from_pkcs12('/path/to/key', 'notasecret') { key }
-    authorization = Object.new
-    stub(Signet::OAuth2::Client).new
-    mock(Signet::OAuth2::Client).new(
-      token_credential_uri: "https://accounts.google.com/o/oauth2/token",
-      audience: "https://accounts.google.com/o/oauth2/token",
-      scope: API_SCOPE,
-      issuer: 'foo@bar.example',
-      signing_key: key) { authorization }
-
-    mock.proxy(Google::Apis::BigqueryV2::BigqueryService).new.with_any_args do |cl|
-      mock(cl).__send__(:authorization=, authorization) {}
-      cl
-    end
-
     driver = create_driver
-    mock.proxy(Fluent::BigQuery::Writer).new(duck_type(:info, :error, :warn), driver.instance.auth_method, is_a(Hash))
-    driver.instance.writer
+    stub_writer(driver, stub_auth: false) do |writer|
+      mock(writer).get_auth_from_private_key { stub! }
+    end
     assert driver.instance.writer.client.is_a?(Google::Apis::BigqueryV2::BigqueryService)
   end
 
   def test_configure_auth_compute_engine
-    authorization = Object.new
-    mock(Google::Auth::GCECredentials).new { authorization }
-
-    mock.proxy(Google::Apis::BigqueryV2::BigqueryService).new.with_any_args do |cl|
-      mock(cl).__send__(:authorization=, authorization) {}
-      cl
-    end
-
     driver = create_driver(%[
       table foo
       auth_method compute_engine
@@ -107,25 +86,18 @@ class BigQueryOutputTest < Test::Unit::TestCase
         {"name": "bytes", "type": "INTEGER"}
       ]
     ])
-    mock.proxy(Fluent::BigQuery::Writer).new(duck_type(:info, :error, :warn), driver.instance.auth_method, is_a(Hash))
-    driver.instance.writer
+
+    stub_writer(driver, stub_auth: false) do |writer|
+      mock(writer).get_auth_from_compute_engine { stub! }
+    end
     assert driver.instance.writer.client.is_a?(Google::Apis::BigqueryV2::BigqueryService)
   end
 
   def test_configure_auth_json_key_as_file
-    json_key_path = 'test/plugin/testdata/json_key.json'
-    authorization = Object.new
-    mock(Google::Auth::ServiceAccountCredentials).make_creds(json_key_io: File.open(json_key_path), scope: API_SCOPE) { authorization }
-
-    mock.proxy(Google::Apis::BigqueryV2::BigqueryService).new.with_any_args do |cl|
-      mock(cl).__send__(:authorization=, authorization) {}
-      cl
-    end
-
     driver = create_driver(%[
       table foo
       auth_method json_key
-      json_key #{json_key_path}
+      json_key jsonkey.josn
       project yourproject_id
       dataset yourdataset_id
       schema [
@@ -134,8 +106,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
         {"name": "bytes", "type": "INTEGER"}
       ]
     ])
-    mock.proxy(Fluent::BigQuery::Writer).new(duck_type(:info, :error, :warn), driver.instance.auth_method, is_a(Hash))
-    driver.instance.writer
+
+    stub_writer(driver, stub_auth: false) do |writer|
+      mock(writer).get_auth_from_json_key { stub! }
+    end
     assert driver.instance.writer.client.is_a?(Google::Apis::BigqueryV2::BigqueryService)
   end
 
@@ -170,12 +144,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
     json_key = '{"private_key": "X", "client_email": "' + 'x' * 255 + '@developer.gserviceaccount.com"}'
     json_key_io = StringIO.new(json_key)
     authorization = Object.new
-    mock(Google::Auth::ServiceAccountCredentials).make_creds(json_key_io: satisfy {|arg| JSON.parse(arg.read) == JSON.parse(json_key_io.read) }, scope: API_SCOPE) { authorization }
-
-    mock.proxy(Google::Apis::BigqueryV2::BigqueryService).new.with_any_args do |cl|
-      mock(cl).__send__(:authorization=, authorization) {}
-      cl
-    end
+    stub(Google::Auth::ServiceAccountCredentials).make_creds(json_key_io: satisfy {|arg| JSON.parse(arg.read) == JSON.parse(json_key_io.read) }, scope: API_SCOPE) { authorization }
 
     driver = create_driver(%[
       table foo
@@ -189,20 +158,13 @@ class BigQueryOutputTest < Test::Unit::TestCase
         {"name": "bytes", "type": "INTEGER"}
       ]
     ])
-    mock.proxy(Fluent::BigQuery::Writer).new(duck_type(:info, :error, :warn), driver.instance.auth_method, is_a(Hash))
-    driver.instance.writer
+    stub_writer(driver, stub_auth: false) do |writer|
+      mock.proxy(writer).get_auth_from_json_key { stub! }
+    end
     assert driver.instance.writer.client.is_a?(Google::Apis::BigqueryV2::BigqueryService)
   end
 
   def test_configure_auth_application_default
-    authorization = Object.new
-    mock(Google::Auth).get_application_default([API_SCOPE]) { authorization }
-
-    mock.proxy(Google::Apis::BigqueryV2::BigqueryService).new.with_any_args do |cl|
-      mock(cl).__send__(:authorization=, authorization) {}
-      cl
-    end
-
     driver = create_driver(%[
       table foo
       auth_method application_default
@@ -215,8 +177,9 @@ class BigQueryOutputTest < Test::Unit::TestCase
       ]
     ])
 
-    mock.proxy(Fluent::BigQuery::Writer).new(duck_type(:info, :error, :warn), driver.instance.auth_method, is_a(Hash))
-    driver.instance.writer
+    stub_writer(driver, stub_auth: false) do |writer|
+      mock.proxy(writer).get_auth_from_application_default { stub! }
+    end
     assert driver.instance.writer.client.is_a?(Google::Apis::BigqueryV2::BigqueryService)
   end
 
@@ -478,9 +441,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
       schema [{"name": "time", "type": "INTEGER"}]
     CONFIG
 
-    writer = stub_writer(driver)
-    mock(writer).fetch_schema('yourproject_id', 'yourdataset_id', 'foo') do
-      sudo_schema_response["schema"]["fields"]
+    stub_writer(driver) do |writer|
+      mock(writer).fetch_schema('yourproject_id', 'yourdataset_id', 'foo') do
+        sudo_schema_response["schema"]["fields"]
+      end
     end
 
     buf = nil
@@ -546,9 +510,10 @@ class BigQueryOutputTest < Test::Unit::TestCase
       </buffer>
     CONFIG
 
-    writer = stub_writer(driver)
-    mock(writer).fetch_schema('yourproject_id', 'yourdataset_id', 'foo') do
-      sudo_schema_response["schema"]["fields"]
+    stub_writer(driver) do |writer|
+      mock(writer).fetch_schema('yourproject_id', 'yourdataset_id', 'foo') do
+        sudo_schema_response["schema"]["fields"]
+      end
     end
 
     buf = nil
@@ -692,16 +657,17 @@ class BigQueryOutputTest < Test::Unit::TestCase
     entry = {a: "b"}
     driver = create_driver
 
-    writer = stub_writer(driver)
-    mock.proxy(writer).insert_rows('yourproject_id', 'yourdataset_id', 'foo', [{json: hash_including(entry)}], template_suffix: nil)
-    mock(writer.client).insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo', {
-      rows: [{json: hash_including(entry)}],
-      skip_invalid_rows: false,
-      ignore_unknown_values: false
-    }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) do
-      s = stub!
-      s.insert_errors { nil }
-      s
+    stub_writer(driver) do |writer|
+      mock.proxy(writer).insert_rows('yourproject_id', 'yourdataset_id', 'foo', [{json: hash_including(entry)}], template_suffix: nil)
+      mock(writer.client).insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo', {
+        rows: [{json: hash_including(entry)}],
+        skip_invalid_rows: false,
+        ignore_unknown_values: false
+      }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) do
+        s = stub!
+        s.insert_errors { nil }
+        s
+      end
     end
 
     driver.run do
@@ -757,14 +723,15 @@ class BigQueryOutputTest < Test::Unit::TestCase
       CONFIG
 
       entry = {a: "b"}
-      writer = stub_writer(driver)
-      mock(writer.client).insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo', {
-        rows: [{json: hash_including(entry)}],
-        skip_invalid_rows: false,
-        ignore_unknown_values: false
-      }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) do
-        ex = Google::Apis::ServerError.new("error", status_code: d["status_code"])
-        raise ex
+      stub_writer(driver) do |writer|
+        mock(writer.client).insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo', {
+          rows: [{json: hash_including(entry)}],
+          skip_invalid_rows: false,
+          ignore_unknown_values: false
+        }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) do
+          ex = Google::Apis::ServerError.new("error", status_code: d["status_code"])
+          raise ex
+        end
       end
 
       assert_raise(Fluent::BigQuery::RetryableError) do
@@ -815,17 +782,18 @@ class BigQueryOutputTest < Test::Unit::TestCase
     CONFIG
 
     entry = {a: "b"}
-    writer = stub_writer(driver)
-    mock(writer.client).insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo', {
-      rows: [{json: hash_including(entry)}],
-      skip_invalid_rows: false,
-      ignore_unknown_values: false
-    }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) do
-      ex = Google::Apis::ServerError.new("error", status_code: 501)
-      def ex.reason
-        "invalid"
+    stub_writer(driver) do |writer|
+      mock(writer.client).insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo', {
+        rows: [{json: hash_including(entry)}],
+        skip_invalid_rows: false,
+        ignore_unknown_values: false
+      }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) do
+        ex = Google::Apis::ServerError.new("error", status_code: 501)
+        def ex.reason
+          "invalid"
+        end
+        raise ex
       end
-      raise ex
     end
 
     driver.instance_start
@@ -862,33 +830,36 @@ class BigQueryOutputTest < Test::Unit::TestCase
     CONFIG
     schema_fields = Fluent::BigQuery::Helper.deep_symbolize_keys(MultiJson.load(File.read(schema_path)))
 
-    writer = stub_writer(driver)
     io = StringIO.new("hello")
     mock(driver.instance).create_upload_source(is_a(Fluent::Plugin::Buffer::Chunk)).yields(io)
-    mock(writer).wait_load_job(is_a(String), "yourproject_id", "yourdataset_id", "dummy_job_id", "foo") { nil }
-    mock(writer.client).insert_job('yourproject_id', {
-      configuration: {
-        load: {
-          destination_table: {
-            project_id: 'yourproject_id',
-            dataset_id: 'yourdataset_id',
-            table_id: 'foo',
-          },
-          schema: {
-            fields: schema_fields,
-          },
-          write_disposition: "WRITE_APPEND",
-          source_format: "NEWLINE_DELIMITED_JSON",
-          ignore_unknown_values: false,
-          max_bad_records: 0,
+    stub_writer(driver) do |writer|
+      mock(writer).wait_load_job(is_a(String), "yourproject_id", "yourdataset_id", "dummy_job_id", "foo") { nil }
+      mock(writer.client).get_table('yourproject_id', 'yourdataset_id', 'foo') { nil }
+
+      mock(writer.client).insert_job('yourproject_id', {
+        configuration: {
+          load: {
+            destination_table: {
+              project_id: 'yourproject_id',
+              dataset_id: 'yourdataset_id',
+              table_id: 'foo',
+            },
+            schema: {
+              fields: schema_fields,
+            },
+            write_disposition: "WRITE_APPEND",
+            source_format: "NEWLINE_DELIMITED_JSON",
+            ignore_unknown_values: false,
+            max_bad_records: 0,
+          }
         }
-      }
-    }, {upload_source: io, content_type: "application/octet-stream", options: {timeout_sec: nil, open_timeout_sec: 60}}) do
-      s = stub!
-      job_reference_stub = stub!
-      s.job_reference { job_reference_stub }
-      job_reference_stub.job_id { "dummy_job_id" }
-      s
+      }, {upload_source: io, content_type: "application/octet-stream", options: {timeout_sec: nil, open_timeout_sec: 60}}) do
+        s = stub!
+        job_reference_stub = stub!
+        s.job_reference { job_reference_stub }
+        job_reference_stub.job_id { "dummy_job_id" }
+        s
+      end
     end
 
     driver.run do
@@ -920,32 +891,35 @@ class BigQueryOutputTest < Test::Unit::TestCase
 
     io = StringIO.new("hello")
     mock(driver.instance).create_upload_source(is_a(Fluent::Plugin::Buffer::Chunk)).yields(io)
-    writer = stub_writer(driver)
-    mock(writer).wait_load_job(is_a(String), "yourproject_id", "yourdataset_id", "dummy_job_id", "foo") { nil }
-    mock(writer.client).insert_job('yourproject_id', {
-      configuration: {
-        load: {
-          destination_table: {
-            project_id: 'yourproject_id',
-            dataset_id: 'yourdataset_id',
-            table_id: 'foo',
+    stub_writer(driver) do |writer|
+      mock(writer).wait_load_job(is_a(String), "yourproject_id", "yourdataset_id", "dummy_job_id", "foo") { nil }
+      mock(writer.client).get_table('yourproject_id', 'yourdataset_id', 'foo') { nil }
+
+      mock(writer.client).insert_job('yourproject_id', {
+        configuration: {
+          load: {
+            destination_table: {
+              project_id: 'yourproject_id',
+              dataset_id: 'yourdataset_id',
+              table_id: 'foo',
+            },
+            schema: {
+              fields: schema_fields,
+            },
+            write_disposition: "WRITE_APPEND",
+            source_format: "NEWLINE_DELIMITED_JSON",
+            ignore_unknown_values: false,
+            max_bad_records: 0,
           },
-          schema: {
-            fields: schema_fields,
-          },
-          write_disposition: "WRITE_APPEND",
-          source_format: "NEWLINE_DELIMITED_JSON",
-          ignore_unknown_values: false,
-          max_bad_records: 0,
         },
-      },
-      job_reference: {project_id: 'yourproject_id', job_id: satisfy { |x| x =~ /fluentd_job_.*/}} ,
-    }, {upload_source: io, content_type: "application/octet-stream", options: {timeout_sec: nil, open_timeout_sec: 60}}) do
-      s = stub!
-      job_reference_stub = stub!
-      s.job_reference { job_reference_stub }
-      job_reference_stub.job_id { "dummy_job_id" }
-      s
+        job_reference: {project_id: 'yourproject_id', job_id: satisfy { |x| x =~ /fluentd_job_.*/}} ,
+      }, {upload_source: io, content_type: "application/octet-stream", options: {timeout_sec: nil, open_timeout_sec: 60}}) do
+        s = stub!
+        job_reference_stub = stub!
+        s.job_reference { job_reference_stub }
+        job_reference_stub.job_id { "dummy_job_id" }
+        s
+      end
     end
 
     driver.run do
@@ -960,7 +934,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
       table foo
       email foo@bar.example
       private_key_path /path/to/key
-      project yourproject_id
+      project yourproject-id
       dataset yourdataset_id
 
       <inject>
@@ -983,44 +957,48 @@ class BigQueryOutputTest < Test::Unit::TestCase
 
     io = StringIO.new("hello")
     mock(driver.instance).create_upload_source(chunk).yields(io)
-    writer = stub_writer(driver)
-    mock(writer.client).insert_job('yourproject_id', {
-      configuration: {
-        load: {
-          destination_table: {
-            project_id: 'yourproject_id',
-            dataset_id: 'yourdataset_id',
-            table_id: 'foo',
-          },
-          schema: {
-            fields: schema_fields,
-          },
-          write_disposition: "WRITE_APPEND",
-          source_format: "NEWLINE_DELIMITED_JSON",
-          ignore_unknown_values: false,
-          max_bad_records: 0,
+
+    stub_writer(driver) do |writer|
+      mock(writer.client).get_table('yourproject-id', 'yourdataset_id', 'foo') { nil }
+
+      mock(writer.client).insert_job('yourproject-id', {
+        configuration: {
+          load: {
+            destination_table: {
+              project_id: 'yourproject-id',
+              dataset_id: 'yourdataset_id',
+              table_id: 'foo',
+            },
+            schema: {
+              fields: schema_fields,
+            },
+            write_disposition: "WRITE_APPEND",
+            source_format: "NEWLINE_DELIMITED_JSON",
+            ignore_unknown_values: false,
+            max_bad_records: 0,
+          }
         }
-      }
-    }, {upload_source: io, content_type: "application/octet-stream", options: {timeout_sec: nil, open_timeout_sec: 60}}) do
-      s = stub!
-      job_reference_stub = stub!
-      s.job_reference { job_reference_stub }
-      job_reference_stub.job_id { "dummy_job_id" }
-      s
-    end
+      }, {upload_source: io, content_type: "application/octet-stream", options: {timeout_sec: nil, open_timeout_sec: 60}}) do
+        s = stub!
+        job_reference_stub = stub!
+        s.job_reference { job_reference_stub }
+        job_reference_stub.job_id { "dummy_job_id" }
+        s
+      end
 
-    mock(writer.client).get_job('yourproject_id', 'dummy_job_id') do
-      s = stub!
-      status_stub = stub!
-      error_result = stub!
+      mock(writer.client).get_job('yourproject-id', 'dummy_job_id') do
+        s = stub!
+        status_stub = stub!
+        error_result = stub!
 
-      s.status { status_stub }
-      status_stub.state { "DONE" }
-      status_stub.error_result { error_result }
-      status_stub.errors { nil }
-      error_result.message { "error" }
-      error_result.reason { "backendError" }
-      s
+        s.status { status_stub }
+        status_stub.state { "DONE" }
+        status_stub.error_result { error_result }
+        status_stub.errors { nil }
+        error_result.message { "error" }
+        error_result.reason { "backendError" }
+        s
+      end
     end
 
     assert_raise Fluent::BigQuery::RetryableError do
@@ -1064,44 +1042,47 @@ class BigQueryOutputTest < Test::Unit::TestCase
 
     io = StringIO.new("hello")
     mock(driver.instance).create_upload_source(chunk).yields(io)
-    writer = stub_writer(driver)
-    mock(writer.client).insert_job('yourproject_id', {
-      configuration: {
-        load: {
-          destination_table: {
-            project_id: 'yourproject_id',
-            dataset_id: 'yourdataset_id',
-            table_id: 'foo',
-          },
-          schema: {
-            fields: schema_fields,
-          },
-          write_disposition: "WRITE_APPEND",
-          source_format: "NEWLINE_DELIMITED_JSON",
-          ignore_unknown_values: false,
-          max_bad_records: 0,
+    stub_writer(driver) do |writer|
+      mock(writer.client).get_table('yourproject_id', 'yourdataset_id', 'foo') { nil }
+
+      mock(writer.client).insert_job('yourproject_id', {
+        configuration: {
+          load: {
+            destination_table: {
+              project_id: 'yourproject_id',
+              dataset_id: 'yourdataset_id',
+              table_id: 'foo',
+            },
+            schema: {
+              fields: schema_fields,
+            },
+            write_disposition: "WRITE_APPEND",
+            source_format: "NEWLINE_DELIMITED_JSON",
+            ignore_unknown_values: false,
+            max_bad_records: 0,
+          }
         }
-      }
-    }, {upload_source: io, content_type: "application/octet-stream", options: {timeout_sec: nil, open_timeout_sec: 60}}) do
-      s = stub!
-      job_reference_stub = stub!
-      s.job_reference { job_reference_stub }
-      job_reference_stub.job_id { "dummy_job_id" }
-      s
-    end
+      }, {upload_source: io, content_type: "application/octet-stream", options: {timeout_sec: nil, open_timeout_sec: 60}}) do
+        s = stub!
+        job_reference_stub = stub!
+        s.job_reference { job_reference_stub }
+        job_reference_stub.job_id { "dummy_job_id" }
+        s
+      end
 
-    mock(writer.client).get_job('yourproject_id', 'dummy_job_id') do
-      s = stub!
-      status_stub = stub!
-      error_result = stub!
+      mock(writer.client).get_job('yourproject_id', 'dummy_job_id') do
+        s = stub!
+        status_stub = stub!
+        error_result = stub!
 
-      s.status { status_stub }
-      status_stub.state { "DONE" }
-      status_stub.error_result { error_result }
-      status_stub.errors { nil }
-      error_result.message { "error" }
-      error_result.reason { "invalid" }
-      s
+        s.status { status_stub }
+        status_stub.state { "DONE" }
+        status_stub.error_result { error_result }
+        status_stub.errors { nil }
+        error_result.message { "error" }
+        error_result.reason { "invalid" }
+        s
+      end
     end
 
     assert_raise Fluent::BigQuery::UnRetryableError do
@@ -1129,12 +1110,13 @@ class BigQueryOutputTest < Test::Unit::TestCase
       ]
     CONFIG
 
-    writer = stub_writer(driver)
-    mock(writer.client).insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo_2014_08_20', {
-      rows: [entry[0]],
-      skip_invalid_rows: false,
-      ignore_unknown_values: false
-    }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) { stub!.insert_errors { nil } }
+    stub_writer(driver) do |writer|
+      mock(writer.client).insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo_2014_08_20', {
+          rows: [entry[0]],
+          skip_invalid_rows: false,
+          ignore_unknown_values: false
+        }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) { stub!.insert_errors { nil } }
+    end
 
     driver.run do
       driver.feed("tag", Time.now.to_i, {"a" => "b", "created_at" => Time.local(2014,8,20,9,0,0).strftime("%Y_%m_%d")})
@@ -1182,11 +1164,13 @@ class BigQueryOutputTest < Test::Unit::TestCase
       auto_create_table true
       schema_path #{File.join(File.dirname(__FILE__), "testdata", "apache.schema")}
     CONFIG
-    writer = stub_writer(driver)
-    mock(writer).insert_rows('yourproject_id', 'yourdataset_id', 'foo', [{json: Fluent::BigQuery::Helper.deep_symbolize_keys(message)}], template_suffix: nil) do
-      raise Fluent::BigQuery::RetryableError.new(nil, Google::Apis::ServerError.new("Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404, body: "Not found: Table yourproject_id:yourdataset_id.foo"))
+
+    stub_writer(driver) do |writer|
+      mock(writer).insert_rows('yourproject_id', 'yourdataset_id', 'foo', [{json: Fluent::BigQuery::Helper.deep_symbolize_keys(message)}], template_suffix: nil) do
+        raise Fluent::BigQuery::RetryableError.new(nil, Google::Apis::ServerError.new("Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404, body: "Not found: Table yourproject_id:yourdataset_id.foo"))
+      end
+      mock(writer).create_table('yourproject_id', 'yourdataset_id', 'foo', driver.instance.instance_variable_get(:@table_schema))
     end
-    mock(writer).create_table('yourproject_id', 'yourdataset_id', 'foo', driver.instance.instance_variable_get(:@table_schema))
 
     assert_raise(RuntimeError) do
       driver.run do
@@ -1239,11 +1223,13 @@ class BigQueryOutputTest < Test::Unit::TestCase
       time_partitioning_type day
       time_partitioning_expiration 1h
     CONFIG
-    writer = stub_writer(driver)
-    mock(writer).insert_rows('yourproject_id', 'yourdataset_id', 'foo', [message], template_suffix: nil) do
-      raise Fluent::BigQuery::RetryableError.new(nil, Google::Apis::ServerError.new("Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404, body: "Not found: Table yourproject_id:yourdataset_id.foo"))
+
+    stub_writer(driver) do |writer|
+      mock(writer).insert_rows('yourproject_id', 'yourdataset_id', 'foo', [message], template_suffix: nil) do
+        raise Fluent::BigQuery::RetryableError.new(nil, Google::Apis::ServerError.new("Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404, body: "Not found: Table yourproject_id:yourdataset_id.foo"))
+      end
+      mock(writer).create_table('yourproject_id', 'yourdataset_id', 'foo', driver.instance.instance_variable_get(:@table_schema))
     end
-    mock(writer).create_table('yourproject_id', 'yourdataset_id', 'foo', driver.instance.instance_variable_get(:@table_schema))
 
     assert_raise(RuntimeError) do
       driver.run do
