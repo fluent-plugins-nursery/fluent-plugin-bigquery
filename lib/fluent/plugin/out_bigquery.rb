@@ -219,6 +219,8 @@ module Fluent
           raise Fluent::ConfigError, "unrecognized 'auth_method': #{@auth_method}"
         end
 
+        @writers = {}
+
         unless @table.nil? ^ @tables.nil?
           raise Fluent::ConfigError, "'table' or 'tables' must be specified, and both are invalid"
         end
@@ -267,7 +269,7 @@ module Fluent
       end
 
       def writer
-        Thread.current["bigquery_writer"] ||= Fluent::BigQuery::Writer.new(@log, @auth_method, {
+        @writers["thread-#{Thread.current.object_id}"] ||= Fluent::BigQuery::Writer.new(@log, @auth_method, {
           private_key_path: @private_key_path, private_key_passphrase: @private_key_passphrase,
           email: @email,
           json_key: @json_key,
