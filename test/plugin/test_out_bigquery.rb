@@ -663,7 +663,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
         rows: [{json: hash_including(entry)}],
         skip_invalid_rows: false,
         ignore_unknown_values: false
-      }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) do
+      }) do
         s = stub!
         s.insert_errors { nil }
         s
@@ -728,7 +728,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
           rows: [{json: hash_including(entry)}],
           skip_invalid_rows: false,
           ignore_unknown_values: false
-        }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) do
+        }) do
           ex = Google::Apis::ServerError.new("error", status_code: d["status_code"])
           raise ex
         end
@@ -787,7 +787,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
         rows: [{json: hash_including(entry)}],
         skip_invalid_rows: false,
         ignore_unknown_values: false
-      }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) do
+      }) do
         ex = Google::Apis::ServerError.new("error", status_code: 501)
         def ex.reason
           "invalid"
@@ -853,7 +853,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
             max_bad_records: 0,
           }
         }
-      }, {upload_source: io, content_type: "application/octet-stream", options: {timeout_sec: nil, open_timeout_sec: 60}}) do
+      }, {upload_source: io, content_type: "application/octet-stream"}) do
         s = stub!
         job_reference_stub = stub!
         s.job_reference { job_reference_stub }
@@ -913,7 +913,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
           },
         },
         job_reference: {project_id: 'yourproject_id', job_id: satisfy { |x| x =~ /fluentd_job_.*/}} ,
-      }, {upload_source: io, content_type: "application/octet-stream", options: {timeout_sec: nil, open_timeout_sec: 60}}) do
+      }, {upload_source: io, content_type: "application/octet-stream"}) do
         s = stub!
         job_reference_stub = stub!
         s.job_reference { job_reference_stub }
@@ -978,7 +978,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
             max_bad_records: 0,
           }
         }
-      }, {upload_source: io, content_type: "application/octet-stream", options: {timeout_sec: nil, open_timeout_sec: 60}}) do
+      }, {upload_source: io, content_type: "application/octet-stream"}) do
         s = stub!
         job_reference_stub = stub!
         s.job_reference { job_reference_stub }
@@ -1062,7 +1062,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
             max_bad_records: 0,
           }
         }
-      }, {upload_source: io, content_type: "application/octet-stream", options: {timeout_sec: nil, open_timeout_sec: 60}}) do
+      }, {upload_source: io, content_type: "application/octet-stream"}) do
         s = stub!
         job_reference_stub = stub!
         s.job_reference { job_reference_stub }
@@ -1115,7 +1115,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
           rows: [entry[0]],
           skip_invalid_rows: false,
           ignore_unknown_values: false
-        }, {options: {timeout_sec: nil, open_timeout_sec: 60}}) { stub!.insert_errors { nil } }
+        }) { stub!.insert_errors { nil } }
     end
 
     driver.run do
