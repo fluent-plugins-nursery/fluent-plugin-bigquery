@@ -94,7 +94,7 @@ module Fluent
           ignore_unknown_values: @options[:ignore_unknown_values],
         }
         body.merge!(template_suffix: template_suffix) if template_suffix
-        res = client.insert_all_table_data(project, dataset, table_id, body)
+        res = client.insert_all_table_data(project, dataset, table_id, body, {})
         log.debug "insert rows", project_id: project, dataset: dataset, table: table_id, count: rows.size
 
         if res.insert_errors && !res.insert_errors.empty?

@@ -663,7 +663,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
         rows: [{json: hash_including(entry)}],
         skip_invalid_rows: false,
         ignore_unknown_values: false
-      }) do
+      }, {}) do
         s = stub!
         s.insert_errors { nil }
         s
@@ -728,7 +728,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
           rows: [{json: hash_including(entry)}],
           skip_invalid_rows: false,
           ignore_unknown_values: false
-        }) do
+        }, {}) do
           ex = Google::Apis::ServerError.new("error", status_code: d["status_code"])
           raise ex
         end
@@ -787,7 +787,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
         rows: [{json: hash_including(entry)}],
         skip_invalid_rows: false,
         ignore_unknown_values: false
-      }) do
+      }, {}) do
         ex = Google::Apis::ServerError.new("error", status_code: 501)
         def ex.reason
           "invalid"
@@ -1115,7 +1115,7 @@ class BigQueryOutputTest < Test::Unit::TestCase
           rows: [entry[0]],
           skip_invalid_rows: false,
           ignore_unknown_values: false
-        }) { stub!.insert_errors { nil } }
+        }, {}) { stub!.insert_errors { nil } }
     end
 
     driver.run do
