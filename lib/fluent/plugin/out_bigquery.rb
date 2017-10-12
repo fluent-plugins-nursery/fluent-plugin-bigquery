@@ -91,6 +91,8 @@ module Fluent
 
       config_param :auto_create_table, :bool, default: false
 
+      config_param :source_format, :enum, list: [:json, :avro, :csv], default: :json
+
       # skip_invalid_rows (only insert)
       #   Insert all valid rows of a request, even if invalid rows exist.
       #   The default value is false, which causes the entire request to fail if any invalid rows exist.
@@ -273,6 +275,7 @@ module Fluent
           private_key_path: @private_key_path, private_key_passphrase: @private_key_passphrase,
           email: @email,
           json_key: @json_key,
+          source_format: @source_format,
           skip_invalid_rows: @skip_invalid_rows,
           ignore_unknown_values: @ignore_unknown_values,
           max_bad_records: @max_bad_records,

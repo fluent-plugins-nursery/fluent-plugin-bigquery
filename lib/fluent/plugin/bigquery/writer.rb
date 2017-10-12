@@ -138,7 +138,7 @@ module Fluent
                 fields: fields.to_a,
               },
               write_disposition: "WRITE_APPEND",
-              source_format: "NEWLINE_DELIMITED_JSON",
+              source_format: source_format,
               ignore_unknown_values: @options[:ignore_unknown_values],
               max_bad_records: @options[:max_bad_records],
             }
@@ -295,6 +295,19 @@ module Fluent
         job_id_key = "#{chunk_id}#{dataset}#{table}#{schema.to_s}#{@options[:max_bad_records]}#{@options[:ignore_unknown_values]}#{@num_errors_per_chunk[chunk_id]}"
         @log.debug "job_id_key: #{job_id_key}"
         "fluentd_job_" + Digest::SHA1.hexdigest(job_id_key)
+      end
+
+      def source_format
+        case @options[:source_format]
+        when :json
+          "NEWLINE_DELIMITED_JSON"
+        when :avro
+          "AVRO"
+        when :csv
+          "CSV"
+        else
+          "NEWLINE_DELIMITED_JSON"
+        end
       end
     end
   end

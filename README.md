@@ -119,8 +119,11 @@ I recommend to use `json` for now.
 For example.
 
 ```
+source_format csv
+
 <format>
-  @type json
+  @type csv
+  fields col1, col2, col3
 </format>
 ```
 
