@@ -16,6 +16,9 @@ module Fluent
 
         client = Google::Apis::BigqueryV2::BigqueryService.new.tap do |cl|
           cl.authorization = get_auth
+          cl.client_options.open_timeout_sec = @options[:open_timeout_sec] if @options[:open_timeout_sec]
+          cl.client_options.read_timeout_sec = @options[:timeout_sec] if @options[:timeout_sec]
+          cl.client_options.send_timeout_sec = @options[:timeout_sec] if @options[:timeout_sec]
         end
 
         @cached_client_expiration = Time.now + 1800
@@ -91,9 +94,7 @@ module Fluent
           ignore_unknown_values: @options[:ignore_unknown_values],
         }
         body.merge!(template_suffix: template_suffix) if template_suffix
-        res = client.insert_all_table_data(project, dataset, table_id, body, {
-          options: {timeout_sec: @options[:timeout_sec], open_timeout_sec: @options[:open_timeout_sec]}
-        })
+        res = client.insert_all_table_data(project, dataset, table_id, body, {})
         log.debug "insert rows", project_id: project, dataset: dataset, table: table_id, count: rows.size
 
         if res.insert_errors && !res.insert_errors.empty?
@@ -164,10 +165,6 @@ module Fluent
           {
             upload_source: upload_source,
             content_type: "application/octet-stream",
-            options: {
-              timeout_sec: @options[:timeout_sec],
-              open_timeout_sec: @options[:open_timeout_sec],
-            }
           }
         )
         wait_load_job(chunk_id, project, dataset, res.job_reference.job_id, table_id)
