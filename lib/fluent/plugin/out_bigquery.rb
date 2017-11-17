@@ -270,6 +270,10 @@ module Fluent
         @last_fetch_schema_time = Hash.new(0)
       end
 
+      def multi_workers_ready?
+        true
+      end
+
       def writer
         @writers["thread-#{Thread.current.object_id}"] ||= Fluent::BigQuery::Writer.new(@log, @auth_method, {
           private_key_path: @private_key_path, private_key_passphrase: @private_key_passphrase,
