@@ -433,7 +433,7 @@ Use placeholder.
   @type bigquery
 
   ...
-  table   accesslog$%Y%m%d
+  table   accesslog_%Y%m%d
 
   <buffer time>
     timekey 1d
