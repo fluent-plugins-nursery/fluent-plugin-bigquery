@@ -53,10 +53,6 @@ module Fluent
       config_param :fetch_schema_table, :string, default: nil
       config_param :schema_cache_expire, :time, default: 600
 
-      REGEXP_MAX_NUM = 10
-      config_param :replace_record_key, :bool, default: false
-      (1..REGEXP_MAX_NUM).each {|i| config_param :"replace_record_key_regexp#{i}", :string, default: nil }
-
       ## Timeout
       # request_timeout_sec
       #   Bigquery API response timeout
