@@ -45,9 +45,6 @@ module Fluent
       def configure(conf)
         super
 
-        formatter_config = conf.elements("format")[0]
-        @formatter = formatter_create(usage: 'out_bigquery_for_insert', type: 'json', conf: formatter_config)
-
         placeholder_params = "project=#{@project}/dataset=#{@dataset}/table=#{@tablelist.join(",")}/fetch_schema_table=#{@fetch_schema_table}"
         placeholder_validate!(:bigquery_load, placeholder_params)
       end

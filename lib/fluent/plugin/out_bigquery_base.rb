@@ -119,6 +119,9 @@ module Fluent
         if @schema_path
           @table_schema.load_schema(MultiJson.load(File.read(@schema_path)))
         end
+
+        formatter_config = conf.elements("format")[0]
+        @formatter = formatter_create(usage: 'out_bigquery_for_insert', type: 'json', conf: formatter_config)
       end
 
       def start
