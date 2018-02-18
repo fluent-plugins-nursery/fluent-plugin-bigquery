@@ -1,20 +1,13 @@
 language: ruby
 
 rvm:
-  - 2.1
   - 2.2
   - 2.3.3
+  - 2.4.3
+  - 2.5.0
 
 gemfile:
   - Gemfile
-  - gemfiles/activesupport-4.gemfile
-
-matrix:
-  exclude:
-    - rvm: 2.0
-      gemfile: Gemfile
-    - rvm: 2.1
-      gemfile: Gemfile
 
 before_install:
   - gem update bundler
