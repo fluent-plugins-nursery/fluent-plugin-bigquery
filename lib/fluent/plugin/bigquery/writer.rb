@@ -167,8 +167,7 @@ module Fluent
             content_type: "application/octet-stream",
           }
         )
-        wait_load_job(chunk_id, project, dataset, res.job_reference.job_id, table_id)
-        @num_errors_per_chunk.delete(chunk_id)
+        wait_load_job(chunk_id, project, res.job_reference.job_id)
       rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
         @client = nil
 
@@ -187,17 +186,18 @@ module Fluent
         end
 
         if job_id && e.status_code == 409 && e.message =~ /Job/ # duplicate load job
-          wait_load_job(chunk_id, project, dataset, job_id, table_id) 
-          @num_errors_per_chunk.delete(chunk_id)
+          wait_load_job(chunk_id, project, job_id) 
           return
         end
 
         raise Fluent::BigQuery::Error.wrap(e)
       end
 
-      def wait_load_job(chunk_id, project, dataset, job_id, table_id)
+      def wait_load_job(chunk_id, project, job_id)
         wait_interval = 10
         _response = client.get_job(project, job_id)
+        dataset = _response.configuration.load.destination_table.dataset_id
+        table_id = _response.configuration.load.destination_table.table_id
 
         until _response.status.state == "DONE"
           log.debug "wait for load job finish", state: _response.status.state, job_id: _response.job_reference.job_id
@@ -225,6 +225,7 @@ module Fluent
         end
 
         log.debug "finish load job", state: _response.status.state
+        @num_errors_per_chunk.delete(chunk_id)
       end
 
       private

@@ -46,7 +46,7 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
     io = StringIO.new("hello")
     mock(driver.instance).create_upload_source(is_a(Fluent::Plugin::Buffer::Chunk)).yields(io)
     stub_writer(driver) do |writer|
-      mock(writer).wait_load_job(is_a(String), "yourproject_id", "yourdataset_id", "dummy_job_id", "foo") { nil }
+      mock(writer).wait_load_job(is_a(String), "yourproject_id", "dummy_job_id") { nil }
       mock(writer.client).get_table('yourproject_id', 'yourdataset_id', 'foo') { nil }
 
       mock(writer.client).insert_job('yourproject_id', {
@@ -105,7 +105,7 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
     io = StringIO.new("hello")
     mock(driver.instance).create_upload_source(is_a(Fluent::Plugin::Buffer::Chunk)).yields(io)
     stub_writer(driver) do |writer|
-      mock(writer).wait_load_job(is_a(String), "yourproject_id", "yourdataset_id", "dummy_job_id", "foo") { nil }
+      mock(writer).wait_load_job(is_a(String), "yourproject_id", "dummy_job_id") { nil }
       mock(writer.client).get_table('yourproject_id', 'yourdataset_id', 'foo') { nil }
 
       mock(writer.client).insert_job('yourproject_id', {
