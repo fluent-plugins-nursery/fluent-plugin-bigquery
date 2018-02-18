@@ -2,12 +2,14 @@
 
 [Fluentd](http://fluentd.org) output plugin to load/insert data into Google BigQuery.
 
-- **Plugin type**: BufferedOutput
+- **Plugin type**: Output
 
 * insert data over streaming inserts
+  * plugin type is `bigquery_insert`
   * for continuous real-time insertions
   * https://developers.google.com/bigquery/streaming-data-into-bigquery#usecases
 * load data
+  * plugin type is `bigquery_load`
   * for data loading as batch jobs, for big amount of data
   * https://developers.google.com/bigquery/loading-data-into-bigquery
 
@@ -31,42 +33,46 @@ Because embbeded gem dependency sometimes restricts ruby environment.
 
 ### Options
 
-| name                                   | type          | required?                                    | placeholder? | default                    | description                                                                                                                                                                                |
-| :------------------------------------- | :------------ | :-----------                                 | :----------  | :------------------------- | :-----------------------                                                                                                                                                                   |
-| method                                 | string        | no                                           | no           | insert                     | `insert` (Streaming Insert) or `load` (load job)                                                                                                                                           |
-| auth_method                            | enum          | yes                                          | no           | private_key                | `private_key` or `json_key` or `compute_engine` or `application_default`                                                                                                                   |
-| email                                  | string        | yes (private_key)                            | no           | nil                        | GCP Service Account Email                                                                                                                                                                  |
-| private_key_path                       | string        | yes (private_key)                            | no           | nil                        | GCP Private Key file path                                                                                                                                                                  |
-| private_key_passphrase                 | string        | yes (private_key)                            | no           | nil                        | GCP Private Key Passphrase                                                                                                                                                                 |
-| json_key                               | string        | yes (json_key)                               | no           | nil                        | GCP JSON Key file path or JSON Key string                                                                                                                                                  |
-| project                                | string        | yes                                          | yes          | nil                        |                                                                                                                                                                                            |
-| dataset                                | string        | yes                                          | yes          | nil                        |                                                                                                                                                                                            |
-| table                                  | string        | yes (either `tables`)                        | yes          | nil                        |                                                                                                                                                                                            |
-| tables                                 | array(string) | yes (either `table`)                         | yes          | nil                        | can set multi table names splitted by `,`                                                                                                                                                  |
-| template_suffix                        | string        | no                                           | yes          | nil                        | can use `%{time_slice}` placeholder replaced by `time_slice_format`                                                                                                                        |
-| auto_create_table                      | bool          | no                                           | no           | false                      | If true, creates table automatically                                                                                                                                                       |
-| skip_invalid_rows                      | bool          | no                                           | no           | false                      | Only `insert` method.                                                                                                                                                                      |
-| max_bad_records                        | integer       | no                                           | no           | 0                          | Only `load` method. If the number of bad records exceeds this value, an invalid error is returned in the job result.                                                                       |
-| ignore_unknown_values                  | bool          | no                                           | no           | false                      | Accept rows that contain values that do not match the schema. The unknown values are ignored.                                                                                              |
-| schema                                 | array         | yes (either `fetch_schema` or `schema_path`) | no           | nil                        | Schema Definition. It is formatted by JSON.                                                                                                                                                |
-| schema_path                            | string        | yes (either `fetch_schema`)                  | no           | nil                        | Schema Definition file path. It is formatted by JSON.                                                                                                                                      |
-| fetch_schema                           | bool          | yes (either `schema_path`)                   | no           | false                      | If true, fetch table schema definition from Bigquery table automatically.                                                                                                                  |
-| fetch_schema_table                     | string        | no                                           | yes          | nil                        | If set, fetch table schema definition from this table, If fetch_schema is false, this param is ignored                                                                                     |
-| schema_cache_expire                    | integer       | no                                           | no           | 600                        | Value is second. If current time is after expiration interval, re-fetch table schema definition.                                                                                           |
-| insert_id_field                        | string        | no                                           | no           | nil                        | Use key as `insert_id` of Streaming Insert API parameter.                                                                                                                                  |
-| add_insert_timestamp                   | string        | no                                           | no           | nil                        | Adds a timestamp column just before sending the rows to BigQuery, so that buffering time is not taken into account. Gives a field in BigQuery which represents the insert time of the row. |
-| allow_retry_insert_errors              | bool          | no                                           | no           | false                      | Retry to insert rows when an insertErrors occurs. There is a possibility that rows are inserted in duplicate.                                                                              |
-| request_timeout_sec                    | integer       | no                                           | no           | nil                        | Bigquery API response timeout                                                                                                                                                              |
-| request_open_timeout_sec               | integer       | no                                           | no           | 60                         | Bigquery API connection, and request timeout. If you send big data to Bigquery, set large value.                                                                                           |
-| time_partitioning_type                 | enum          | no (either day)                              | no           | nil                        | Type of bigquery time partitioning feature(experimental feature on BigQuery).                                                                                                              |
-| time_partitioning_expiration           | time          | no                                           | no           | nil                        | Expiration milliseconds for bigquery time partitioning. (experimental feature on BigQuery)                                                                                                 |
+#### common
 
-### Deprecated
+| name                                   | type          | required?                                    | placeholder? | default                    | description                                                                                            |
+| :------------------------------------- | :------------ | :-----------                                 | :----------  | :------------------------- | :-----------------------                                                                               |
+| auth_method                            | enum          | yes                                          | no           | private_key                | `private_key` or `json_key` or `compute_engine` or `application_default`                               |
+| email                                  | string        | yes (private_key)                            | no           | nil                        | GCP Service Account Email                                                                              |
+| private_key_path                       | string        | yes (private_key)                            | no           | nil                        | GCP Private Key file path                                                                              |
+| private_key_passphrase                 | string        | yes (private_key)                            | no           | nil                        | GCP Private Key Passphrase                                                                             |
+| json_key                               | string        | yes (json_key)                               | no           | nil                        | GCP JSON Key file path or JSON Key string                                                              |
+| project                                | string        | yes                                          | yes          | nil                        |                                                                                                        |
+| dataset                                | string        | yes                                          | yes          | nil                        |                                                                                                        |
+| table                                  | string        | yes (either `tables`)                        | yes          | nil                        |                                                                                                        |
+| tables                                 | array(string) | yes (either `table`)                         | yes          | nil                        | can set multi table names splitted by `,`                                                              |
+| auto_create_table                      | bool          | no                                           | no           | false                      | If true, creates table automatically                                                                   |
+| ignore_unknown_values                  | bool          | no                                           | no           | false                      | Accept rows that contain values that do not match the schema. The unknown values are ignored.          |
+| schema                                 | array         | yes (either `fetch_schema` or `schema_path`) | no           | nil                        | Schema Definition. It is formatted by JSON.                                                            |
+| schema_path                            | string        | yes (either `fetch_schema`)                  | no           | nil                        | Schema Definition file path. It is formatted by JSON.                                                  |
+| fetch_schema                           | bool          | yes (either `schema_path`)                   | no           | false                      | If true, fetch table schema definition from Bigquery table automatically.                              |
+| fetch_schema_table                     | string        | no                                           | yes          | nil                        | If set, fetch table schema definition from this table, If fetch_schema is false, this param is ignored |
+| schema_cache_expire                    | integer       | no                                           | no           | 600                        | Value is second. If current time is after expiration interval, re-fetch table schema definition.       |
+| request_timeout_sec                    | integer       | no                                           | no           | nil                        | Bigquery API response timeout                                                                          |
+| request_open_timeout_sec               | integer       | no                                           | no           | 60                         | Bigquery API connection, and request timeout. If you send big data to Bigquery, set large value.       |
+| time_partitioning_type                 | enum          | no (either day)                              | no           | nil                        | Type of bigquery time partitioning feature(experimental feature on BigQuery).                          |
+| time_partitioning_expiration           | time          | no                                           | no           | nil                        | Expiration milliseconds for bigquery time partitioning. (experimental feature on BigQuery)             |
+#### bigquery_insert
 
-| name                                   | type          | required?    | placeholder? | default                    | description              |
-| :------------------------------------- | :------------ | :----------- | :----------  | :------------------------- | :----------------------- |
-| replace_record_key                     | bool          | no           | no           | false                      | Use other filter plugin. |
-| replace_record_key_regexp{1-10}        | string        | no           | no           | nil                        |                          |
+| name                                   | type          | required?    | placeholder? | default                    | description                                                                                                                                                                                |
+| :------------------------------------- | :------------ | :----------- | :----------  | :------------------------- | :-----------------------                                                                                                                                                                   |
+| template_suffix                        | string        | no           | yes          | nil                        | can use `%{time_slice}` placeholder replaced by `time_slice_format`                                                                                                                        |
+| skip_invalid_rows                      | bool          | no           | no           | false                      |                                                                                                                                                                                            |
+| insert_id_field                        | string        | no           | no           | nil                        | Use key as `insert_id` of Streaming Insert API parameter. see. https://docs.fluentd.org/v1.0/articles/api-plugin-helper-record_accessor                                                    |
+| add_insert_timestamp                   | string        | no           | no           | nil                        | Adds a timestamp column just before sending the rows to BigQuery, so that buffering time is not taken into account. Gives a field in BigQuery which represents the insert time of the row. |
+| allow_retry_insert_errors              | bool          | no           | no           | false                      | Retry to insert rows when an insertErrors occurs. There is a possibility that rows are inserted in duplicate.                                                                              |
+
+#### bigquery_load
+
+| name                                   | type          | required?    | placeholder? | default                    | description                                                                                                                                    |
+| :------------------------------------- | :------------ | :----------- | :----------  | :------------------------- | :-----------------------                                                                                                                       |
+| source_format                          | enum          | no           | no           | json                       | Specify source format `json` or `csv` or `avro`. If you change this parameter, you must change formatter plugin via `<format>` config section. |
+| max_bad_records                        | integer       | no           | no           | 0                          | If the number of bad records exceeds this value, an invalid error is returned in the job result.                                               |
 
 ### Buffer section
 
@@ -77,9 +83,9 @@ Because embbeded gem dependency sometimes restricts ruby environment.
 | total_limit_size                       | integer       | no           | 1GB (insert) or 32GB (load)    |                                    |
 | chunk_records_limit                    | integer       | no           | 500 (insert) or nil (load)     |                                    |
 | flush_mode                             | enum          | no           | interval                       | default, lazy, interval, immediate |
-| flush_interval                         | float         | no           | 0.25 (insert) or nil (load)    |                                    |
-| flush_thread_interval                  | float         | no           | 0.05 (insert) or nil (load)    |                                    |
-| flush_thread_burst_interval            | float         | no           | 0.05 (insert) or nil (load)    |                                    |
+| flush_interval                         | float         | no           | 1.0 (insert) or 3600 (load)    |                                    |
+| flush_thread_interval                  | float         | no           | 0.05 (insert) or 5 (load)      |                                    |
+| flush_thread_burst_interval            | float         | no           | 0.05 (insert) or 5 (load)      |                                    |
 
 And, other params (defined by base class) are available
 
@@ -142,9 +148,7 @@ Configure insert specifications with target table schema, with your credentials.
 
 ```apache
 <match dummy>
-  @type bigquery
-
-  method insert    # default
+  @type bigquery_insert
 
   auth_method private_key   # default
   email xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxx@developer.gserviceaccount.com
@@ -181,14 +185,12 @@ For high rate inserts over streaming inserts, you should specify flush intervals
 
 ```apache
 <match dummy>
-  @type bigquery
-
-  method insert    # default
+  @type bigquery_insert
   
   <buffer>
     flush_interval 0.1  # flush as frequent as possible
     
-    buffer_queue_limit 10240        # 1MB * 10240 -> 10GB!
+    total_limit_size 10g
     
     flush_thread_count 16
   </buffer>
@@ -256,16 +258,12 @@ section in the Google BigQuery document.
 ### Load
 ```apache
 <match bigquery>
-  @type bigquery
-
-  method load
+  @type bigquery_load
 
   <buffer>
-  @type file
-  path bigquery.*.buffer
-  flush_interval 1800
-  flush_at_shutdown true
-  timekey_use_utc
+    path bigquery.*.buffer
+    flush_at_shutdown true
+    timekey_use_utc
   </buffer>
 
   auth_method json_key
@@ -302,7 +300,7 @@ download its JSON key and deploy the key with fluentd.
 
 ```apache
 <match dummy>
-  @type bigquery
+  @type bigquery_insert
 
   auth_method json_key
   json_key /home/username/.keys/00000000000000000000000000000000-jsonkey.json
@@ -319,7 +317,7 @@ You need to only include `private_key` and `client_email` key from JSON key file
 
 ```apache
 <match dummy>
-  @type bigquery
+  @type bigquery_insert
 
   auth_method json_key
   json_key {"private_key": "-----BEGIN PRIVATE KEY-----\n...", "client_email": "xxx@developer.gserviceaccount.com"}
@@ -340,7 +338,7 @@ Compute Engine instance, then you can configure fluentd like this.
 
 ```apache
 <match dummy>
-  @type bigquery
+  @type bigquery_insert
 
   auth_method compute_engine
 
@@ -382,7 +380,7 @@ data is inserted into tables `accesslog_2014_08`, `accesslog_2014_09` and so on.
 
 ```apache
 <match dummy>
-  @type bigquery
+  @type bigquery_insert
 
   ...
 
@@ -430,7 +428,7 @@ Use placeholder.
 
 ```apache
 <match dummy>
-  @type bigquery
+  @type bigquery_insert
 
   ...
   table   accesslog$%Y%m%d
@@ -453,7 +451,7 @@ NOTE: `auto_create_table` option cannot be used with `fetch_schema`. You should 
 
 ```apache
 <match dummy>
-  @type bigquery
+  @type bigquery_insert
 
   ...
 
@@ -477,7 +475,7 @@ you can also specify nested fields by prefixing their belonging record fields.
 
 ```apache
 <match dummy>
-  @type bigquery
+  @type bigquery_insert
 
   ...
 
@@ -528,7 +526,7 @@ The second method is to specify a path to a BigQuery schema file instead of list
 
 ```apache
 <match dummy>
-  @type bigquery
+  @type bigquery_insert
 
   ...
   
@@ -541,7 +539,7 @@ The third method is to set `fetch_schema` to `true` to enable fetch a schema usi
 
 ```apache
 <match dummy>
-  @type bigquery
+  @type bigquery_insert
 
   ...
   
@@ -564,7 +562,7 @@ You can set `insert_id_field` option to specify the field to use as `insertId` p
 
 ```apache
 <match dummy>
-  @type bigquery
+  @type bigquery_insert
 
   ...
 
