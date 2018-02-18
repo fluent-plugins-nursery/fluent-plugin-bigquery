@@ -5,6 +5,8 @@ module Fluent
     class BigQueryInsertOutput < BigQueryBaseOutput
       Fluent::Plugin.register_output('bigquery_insert', self)
 
+      helpers :record_accessor
+
       # template_suffix (only insert)
       #   https://cloud.google.com/bigquery/streaming-data-into-bigquery#template_table_details
       config_param :template_suffix, :string, default: nil
@@ -43,12 +45,10 @@ module Fluent
         super
 
         if @insert_id_field
-          insert_id_keys = @insert_id_field.split('.')
-          @get_insert_id = ->(record) {
-            insert_id_keys.inject(record) {|h, k| h[k] }
-          }
-        else
-          @get_insert_id = nil
+          if @insert_id_field !~ /^\$[\[\.]/ && @insert_id_field =~ /\./
+            warn "[BREAKING CHANGE] insert_id_field format is changed. Use fluentd record_accessor helper. (https://docs.fluentd.org/v1.0/articles/api-plugin-helper-record_accessor)"
+          end
+          @get_insert_id = record_accessor_create(@insert_id_field)
         end
 
         formatter_config = conf.elements("format")[0]

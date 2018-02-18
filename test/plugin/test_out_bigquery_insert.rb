@@ -103,7 +103,7 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
       project yourproject_id
       dataset yourdataset_id
 
-      insert_id_field data.uuid
+      insert_id_field $.data.uuid
       schema [{"name": "data", "type": "RECORD", "fields": [
         {"name": "uuid", "type": "STRING"}
       ]}]
