@@ -5,6 +5,8 @@ module Fluent
     class BigQueryLoadOutput < BigQueryBaseOutput
       Fluent::Plugin.register_output('bigquery_load', self)
 
+      helpers :timer
+
       ### default for loads
       def configure_for_load(conf)
         raise ConfigError unless conf["method"] == "load"
@@ -30,6 +32,8 @@ module Fluent
 
       # prevent_duplicate_load (only load)
       config_param :prevent_duplicate_load, :bool, default: false
+
+      config_param :wait_job_interval, :time, default: 10
 
       ## Buffer
       config_section :buffer do
@@ -67,15 +71,16 @@ module Fluent
         table_id = extract_placeholders(table_format, metadata)
         schema = get_schema(project, dataset, metadata)
 
-        create_load_job(chunk, project, dataset, table_id, schema)
-      end
-
-      def create_load_job(chunk, project, dataset, table_id, schema)
-        res = nil
-
-        create_upload_source(chunk) do |upload_source|
-          res = writer.create_load_job(chunk.unique_id, project, dataset, table_id, upload_source, schema)
+        chunk_hex_id = dump_unique_id_hex(chunk.unique_id)
+        job_reference = create_upload_source(chunk) do |upload_source|
+          writer.create_load_job(chunk_hex_id, project, dataset, table_id, upload_source, schema)
         end
+
+        until response = writer.fetch_load_job(job_reference)
+          sleep @wait_job_interval
+        end
+
+        writer.commit_load_job(chunk_hex_id, response)
       rescue Fluent::BigQuery::Error => e
         raise if e.retryable?
 
@@ -101,6 +106,12 @@ module Fluent
       end
 
       private
+
+      def create_load_job(chunk, project, dataset, table_id, schema)
+        create_upload_source(chunk) do |upload_source|
+          writer.create_load_job(chunk.unique_id, project, dataset, table_id, upload_source, schema)
+        end
+      end
 
       def create_upload_source(chunk)
         chunk_is_file = @buffer_config["@type"] == 'file'

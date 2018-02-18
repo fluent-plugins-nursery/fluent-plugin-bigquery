@@ -125,7 +125,9 @@ module Fluent
         raise wrapped
       end
 
-      def create_load_job(chunk_id, project, dataset, table_id, upload_source, fields)
+      JobReference = Struct.new(:project_id, :job_id)
+
+      def create_load_job(chunk_id, project, dataset, table_id, upload_source, fields, wait: true)
         configuration = {
           configuration: {
             load: {
@@ -167,7 +169,7 @@ module Fluent
             content_type: "application/octet-stream",
           }
         )
-        wait_load_job(chunk_id, project, res.job_reference.job_id)
+        JobReference.new(project, res.job_reference.job_id)
       rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
         @client = nil
 
@@ -186,35 +188,45 @@ module Fluent
         end
 
         if job_id && e.status_code == 409 && e.message =~ /Job/ # duplicate load job
-          wait_load_job(chunk_id, project, job_id) 
-          return
+          return JobReference.new(project, res.id)
         end
 
         raise Fluent::BigQuery::Error.wrap(e)
       end
 
-      def wait_load_job(chunk_id, project, job_id)
-        wait_interval = 10
-        _response = client.get_job(project, job_id)
-        dataset = _response.configuration.load.destination_table.dataset_id
-        table_id = _response.configuration.load.destination_table.table_id
+      def fetch_load_job(job_reference)
+        project = job_reference.project_id
+        job_id = job_reference.job_id
 
-        until _response.status.state == "DONE"
-          log.debug "wait for load job finish", state: _response.status.state, job_id: _response.job_reference.job_id
-          sleep wait_interval
-          _response = client.get_job(project, _response.job_reference.job_id)
+        res = client.get_job(project, job_id)
+        log.debug "fetch load job", id: job_id, state: res.status.state
+
+        if res.status.state == "DONE"
+          res
         end
+      rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
+        @client = nil
 
-        errors = _response.status.errors
+        e = Fluent::BigQuery::Error.wrap(e) 
+        raise e unless e.retryable?
+      end
+
+      def commit_load_job(chunk_id, response)
+        job_id = response.id
+        project = response.configuration.load.destination_table.project_id
+        dataset = response.configuration.load.destination_table.dataset_id
+        table_id = response.configuration.load.destination_table.table_id
+
+        errors = response.status.errors
         if errors
           errors.each do |e|
-            log.error "job.insert API (rows)", job_id: job_id, project_id: project, dataset: dataset, table: table_id, message: e.message, reason: e.reason
+            log.error "job.load API (rows)", job_id: job_id, project_id: project, dataset: dataset, table: table_id, message: e.message, reason: e.reason
           end
         end
 
-        error_result = _response.status.error_result
+        error_result = response.status.error_result
         if error_result
-          log.error "job.insert API (result)", job_id: job_id, project_id: project, dataset: dataset, table: table_id, message: error_result.message, reason: error_result.reason
+          log.error "job.load API (result)", job_id: job_id, project_id: project, dataset: dataset, table: table_id, message: error_result.message, reason: error_result.reason
           if Fluent::BigQuery::Error.retryable_error_reason?(error_result.reason)
             @num_errors_per_chunk[chunk_id] = @num_errors_per_chunk[chunk_id].to_i + 1
             raise Fluent::BigQuery::RetryableError.new("failed to load into bigquery, retry")
@@ -224,7 +236,9 @@ module Fluent
           end
         end
 
-        log.debug "finish load job", state: _response.status.state
+        stats = response.statistics.load
+        duration = (response.statistics.end_time - response.statistics.creation_time) / 1000.0
+        log.debug "finish load job", id: job_id, state: response.status.state, input_file_bytes: stats.input_file_bytes, input_files: stats.input_files, output_bytes: stats.output_bytes, output_rows: stats.output_rows, bad_records: stats.bad_records, duration: duration.round(2)
         @num_errors_per_chunk.delete(chunk_id)
       end
 

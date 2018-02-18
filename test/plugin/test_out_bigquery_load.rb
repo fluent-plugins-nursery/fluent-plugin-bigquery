@@ -43,10 +43,13 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
     driver = create_driver
     schema_fields = Fluent::BigQuery::Helper.deep_symbolize_keys(MultiJson.load(File.read(SCHEMA_PATH)))
 
-    io = StringIO.new("hello")
-    mock(driver.instance).create_upload_source(is_a(Fluent::Plugin::Buffer::Chunk)).yields(io)
+    response_stub = stub!
+    job_reference = Fluent::BigQuery::Writer::JobReference.new("yourproject_id", "dummy_job_id")
+
     stub_writer(driver) do |writer|
-      mock(writer).wait_load_job(is_a(String), "yourproject_id", "dummy_job_id") { nil }
+      mock(writer).fetch_load_job(job_reference) { response_stub }
+      mock(writer).commit_load_job(is_a(String), response_stub)
+
       mock(writer.client).get_table('yourproject_id', 'yourdataset_id', 'foo') { nil }
 
       mock(writer.client).insert_job('yourproject_id', {
@@ -66,11 +69,9 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
             max_bad_records: 0,
           }
         }
-      }, {upload_source: io, content_type: "application/octet-stream"}) do
+      }, {upload_source: duck_type(:write, :sync, :rewind), content_type: "application/octet-stream"}) do
         s = stub!
-        job_reference_stub = stub!
-        s.job_reference { job_reference_stub }
-        job_reference_stub.job_id { "dummy_job_id" }
+        s.job_reference { job_reference }
         s
       end
     end
@@ -102,10 +103,12 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
     CONFIG
     schema_fields = Fluent::BigQuery::Helper.deep_symbolize_keys(MultiJson.load(File.read(SCHEMA_PATH)))
 
-    io = StringIO.new("hello")
-    mock(driver.instance).create_upload_source(is_a(Fluent::Plugin::Buffer::Chunk)).yields(io)
+    response_stub = stub!
+    job_reference = Fluent::BigQuery::Writer::JobReference.new("yourproject_id", "dummy_job_id")
     stub_writer(driver) do |writer|
-      mock(writer).wait_load_job(is_a(String), "yourproject_id", "dummy_job_id") { nil }
+      mock(writer).fetch_load_job(job_reference) { response_stub }
+      mock(writer).commit_load_job(is_a(String), response_stub)
+
       mock(writer.client).get_table('yourproject_id', 'yourdataset_id', 'foo') { nil }
 
       mock(writer.client).insert_job('yourproject_id', {
@@ -126,11 +129,9 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
           },
         },
         job_reference: {project_id: 'yourproject_id', job_id: satisfy { |x| x =~ /fluentd_job_.*/}} ,
-      }, {upload_source: io, content_type: "application/octet-stream"}) do
+      }, {upload_source: duck_type(:write, :sync, :rewind), content_type: "application/octet-stream"}) do
         s = stub!
-        job_reference_stub = stub!
-        s.job_reference { job_reference_stub }
-        job_reference_stub.job_id { "dummy_job_id" }
+        s.job_reference { job_reference }
         s
       end
     end
@@ -151,9 +152,7 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
       c.append([driver.instance.format(tag, time, record)])
     end
 
-    io = StringIO.new("hello")
-    mock(driver.instance).create_upload_source(chunk).yields(io)
-
+    job_reference = Fluent::BigQuery::Writer::JobReference.new("yourproject_id", "dummy_job_id")
     stub_writer(driver) do |writer|
       mock(writer.client).get_table('yourproject_id', 'yourdataset_id', 'foo') { nil }
 
@@ -174,26 +173,33 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
             max_bad_records: 0,
           }
         }
-      }, {upload_source: io, content_type: "application/octet-stream"}) do
+      }, {upload_source: duck_type(:write, :sync, :rewind), content_type: "application/octet-stream"}) do
         s = stub!
-        job_reference_stub = stub!
-        s.job_reference { job_reference_stub }
-        job_reference_stub.job_id { "dummy_job_id" }
+        s.job_reference { job_reference }
         s
       end
 
       mock(writer.client).get_job('yourproject_id', 'dummy_job_id') do
-        s = stub!
-        status_stub = stub!
-        error_result = stub!
-
-        s.status { status_stub }
-        status_stub.state { "DONE" }
-        status_stub.error_result { error_result }
-        status_stub.errors { nil }
-        error_result.message { "error" }
-        error_result.reason { "backendError" }
-        s
+        stub! do |s|
+          s.id { 'dummy_job_id' }
+          s.configuration.stub! do |_s|
+            _s.load.stub! do |__s|
+              __s.destination_table.stub! do |___s|
+                ___s.project_id { 'yourproject_id' }
+                ___s.dataset_id { 'yourdataset_id' }
+                ___s.table_id { 'foo' }
+              end
+            end
+          end
+          s.status.stub! do |_s|
+            _s.state { 'DONE' }
+            _s.errors { [] }
+            _s.error_result.stub! do |__s|
+              __s.message { 'error' }
+              __s.reason { 'backendError' }
+            end
+          end
+        end
       end
     end
 
@@ -236,8 +242,6 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
       c.append([driver.instance.format(tag, time, record)])
     end
 
-    io = StringIO.new("hello")
-    mock(driver.instance).create_upload_source(chunk).yields(io)
     stub_writer(driver) do |writer|
       mock(writer.client).get_table('yourproject_id', 'yourdataset_id', 'foo') { nil }
 
@@ -258,7 +262,7 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
             max_bad_records: 0,
           }
         }
-      }, {upload_source: io, content_type: "application/octet-stream"}) do
+      }, {upload_source: duck_type(:write, :sync, :rewind), content_type: "application/octet-stream"}) do
         s = stub!
         job_reference_stub = stub!
         s.job_reference { job_reference_stub }
@@ -267,17 +271,26 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
       end
 
       mock(writer.client).get_job('yourproject_id', 'dummy_job_id') do
-        s = stub!
-        status_stub = stub!
-        error_result = stub!
-
-        s.status { status_stub }
-        status_stub.state { "DONE" }
-        status_stub.error_result { error_result }
-        status_stub.errors { nil }
-        error_result.message { "error" }
-        error_result.reason { "invalid" }
-        s
+        stub! do |s|
+          s.id { 'dummy_job_id' }
+          s.configuration.stub! do |_s|
+            _s.load.stub! do |__s|
+              __s.destination_table.stub! do |___s|
+                ___s.project_id { 'yourproject_id' }
+                ___s.dataset_id { 'yourdataset_id' }
+                ___s.table_id { 'foo' }
+              end
+            end
+          end
+          s.status.stub! do |_s|
+            _s.state { 'DONE' }
+            _s.errors { [] }
+            _s.error_result.stub! do |__s|
+              __s.message { 'error' }
+              __s.reason { 'invalid' }
+            end
+          end
+        end
       end
     end
 
@@ -286,5 +299,24 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
     end
     assert_in_delta driver.instance.retry.secondary_transition_at , Time.now, 0.1
     driver.instance_shutdown
+  end
+
+  private
+
+  def create_response_stub(response)
+    case response
+    when Hash
+      root = stub!
+      response.each do |k, v|
+        root.__send__(k) do
+          create_response_stub(v)
+        end
+      end
+      root
+    when Array
+      response.map { |item| create_response_stub(item) }
+    else
+      response
+    end
   end
 end
