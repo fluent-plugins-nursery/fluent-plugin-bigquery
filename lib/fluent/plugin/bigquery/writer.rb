@@ -125,9 +125,9 @@ module Fluent
         raise wrapped
       end
 
-      JobReference = Struct.new(:project_id, :job_id)
+      JobReference = Struct.new(:chunk_id, :chunk_id_hex, :project_id, :dataset_id, :table_id, :job_id)
 
-      def create_load_job(chunk_id, project, dataset, table_id, upload_source, fields, wait: true)
+      def create_load_job(chunk_id, chunk_id_hex, project, dataset, table_id, upload_source, fields)
         configuration = {
           configuration: {
             load: {
@@ -147,7 +147,7 @@ module Fluent
           }
         }
 
-        job_id = create_job_id(chunk_id, dataset, table_id, fields.to_a) if @options[:prevent_duplicate_load]
+        job_id = create_job_id(chunk_id_hex, dataset, table_id, fields.to_a) if @options[:prevent_duplicate_load]
         configuration[:configuration][:load].merge!(create_disposition: "CREATE_NEVER") if @options[:time_partitioning_type]
         configuration.merge!({job_reference: {project_id: project, job_id: job_id}}) if job_id
 
@@ -169,7 +169,7 @@ module Fluent
             content_type: "application/octet-stream",
           }
         )
-        JobReference.new(project, res.job_reference.job_id)
+        JobReference.new(chunk_id, chunk_id_hex, project, dataset, table_id, res.job_reference.job_id)
       rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
         @client = nil
 
@@ -188,7 +188,7 @@ module Fluent
         end
 
         if job_id && e.status_code == 409 && e.message =~ /Job/ # duplicate load job
-          return JobReference.new(project, res.id)
+          return JobReference.new(chunk_id, chunk_id_hex, project, dataset, table_id, job_id)
         end
 
         raise Fluent::BigQuery::Error.wrap(e)
@@ -199,7 +199,7 @@ module Fluent
         job_id = job_reference.job_id
 
         res = client.get_job(project, job_id)
-        log.debug "fetch load job", id: job_id, state: res.status.state
+        log.debug "load job fetched", id: job_id, state: res.status.state, project: job_reference.project_id, dataset: job_reference.dataset_id, table: job_reference.table_id
 
         if res.status.state == "DONE"
           res
@@ -211,7 +211,7 @@ module Fluent
         raise e unless e.retryable?
       end
 
-      def commit_load_job(chunk_id, response)
+      def commit_load_job(chunk_id_hex, response)
         job_id = response.id
         project = response.configuration.load.destination_table.project_id
         dataset = response.configuration.load.destination_table.dataset_id
@@ -228,18 +228,18 @@ module Fluent
         if error_result
           log.error "job.load API (result)", job_id: job_id, project_id: project, dataset: dataset, table: table_id, message: error_result.message, reason: error_result.reason
           if Fluent::BigQuery::Error.retryable_error_reason?(error_result.reason)
-            @num_errors_per_chunk[chunk_id] = @num_errors_per_chunk[chunk_id].to_i + 1
+            @num_errors_per_chunk[chunk_id_hex] = @num_errors_per_chunk[chunk_id_hex].to_i + 1
             raise Fluent::BigQuery::RetryableError.new("failed to load into bigquery, retry")
           else
-            @num_errors_per_chunk.delete(chunk_id)
+            @num_errors_per_chunk.delete(chunk_id_hex)
             raise Fluent::BigQuery::UnRetryableError.new("failed to load into bigquery, and cannot retry")
           end
         end
 
         stats = response.statistics.load
         duration = (response.statistics.end_time - response.statistics.creation_time) / 1000.0
-        log.debug "finish load job", id: job_id, state: response.status.state, input_file_bytes: stats.input_file_bytes, input_files: stats.input_files, output_bytes: stats.output_bytes, output_rows: stats.output_rows, bad_records: stats.bad_records, duration: duration.round(2)
-        @num_errors_per_chunk.delete(chunk_id)
+        log.debug "load job finished", id: job_id, state: response.status.state, input_file_bytes: stats.input_file_bytes, input_files: stats.input_files, output_bytes: stats.output_bytes, output_rows: stats.output_rows, bad_records: stats.bad_records, duration: duration.round(2), project_id: project, dataset: dataset, table: table_id
+        @num_errors_per_chunk.delete(chunk_id_hex)
       end
 
       private
@@ -306,8 +306,8 @@ module Fluent
         table_id.gsub(/\$\d+$/, "")
       end
 
-      def create_job_id(chunk_id, dataset, table, schema)
-        job_id_key = "#{chunk_id}#{dataset}#{table}#{schema.to_s}#{@options[:max_bad_records]}#{@options[:ignore_unknown_values]}#{@num_errors_per_chunk[chunk_id]}"
+      def create_job_id(chunk_id_hex, dataset, table, schema)
+        job_id_key = "#{chunk_id_hex}#{dataset}#{table}#{schema.to_s}#{@options[:max_bad_records]}#{@options[:ignore_unknown_values]}#{@num_errors_per_chunk[chunk_id_hex]}"
         @log.debug "job_id_key: #{job_id_key}"
         "fluentd_job_" + Digest::SHA1.hexdigest(job_id_key)
       end
