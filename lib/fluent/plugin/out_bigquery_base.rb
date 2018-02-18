@@ -7,6 +7,10 @@ require 'fluent/plugin/bigquery/errors'
 require 'fluent/plugin/bigquery/schema'
 require 'fluent/plugin/bigquery/writer'
 
+require 'multi_json'
+require 'google/apis/bigquery_v2'
+require 'googleauth'
+
 module Fluent
   module Plugin
     # This class is abstract class
@@ -68,16 +72,6 @@ module Fluent
       ## Formatter
       config_section :format do
         config_set_default :@type, 'json'
-      end
-
-      def initialize
-        super
-        require 'multi_json'
-        require 'google/apis/bigquery_v2'
-        require 'googleauth'
-
-        # MEMO: signet-0.6.1 depend on Farady.default_connection
-        Faraday.default_connection.options.timeout = 60
       end
 
       def configure(conf)
