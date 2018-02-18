@@ -559,6 +559,8 @@ you are still recommended to specify JSON types for TIMESTAMP fields as "time" f
 
 BigQuery uses `insertId` property to detect duplicate insertion requests (see [data consistency](https://cloud.google.com/bigquery/streaming-data-into-bigquery#dataconsistency) in Google BigQuery documents).
 You can set `insert_id_field` option to specify the field to use as `insertId` property.
+`insert_id_field` can use fluentd record_accessor format like `$['key1'][0]['key2']`.
+(detail. https://docs.fluentd.org/v1.0/articles/api-plugin-helper-record_accessor)
 
 ```apache
 <match dummy>
