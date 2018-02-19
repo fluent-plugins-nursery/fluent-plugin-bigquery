@@ -44,7 +44,7 @@ class BigQueryBaseOutputTest < Test::Unit::TestCase
     Fluent::Test::Driver::Output.new(Fluent::Plugin::BigQueryBaseOutput).configure(conf)
   end
 
-  def stub_writer(driver, stub_auth: true)
+  def stub_writer(stub_auth: true)
     stub.proxy(Fluent::BigQuery::Writer).new.with_any_args do |writer|
       stub(writer).get_auth { nil } if stub_auth
       yield writer
@@ -102,7 +102,7 @@ class BigQueryBaseOutputTest < Test::Unit::TestCase
 
   def test_configure_auth_private_key
     driver = create_driver
-    stub_writer(driver, stub_auth: false) do |writer|
+    stub_writer(stub_auth: false) do |writer|
       mock(writer).get_auth_from_private_key { stub! }
     end
     assert driver.instance.writer.client.is_a?(Google::Apis::BigqueryV2::BigqueryService)
@@ -121,7 +121,7 @@ class BigQueryBaseOutputTest < Test::Unit::TestCase
       ]
     ])
 
-    stub_writer(driver, stub_auth: false) do |writer|
+    stub_writer(stub_auth: false) do |writer|
       mock(writer).get_auth_from_compute_engine { stub! }
     end
     assert driver.instance.writer.client.is_a?(Google::Apis::BigqueryV2::BigqueryService)
@@ -141,7 +141,7 @@ class BigQueryBaseOutputTest < Test::Unit::TestCase
       ]
     ])
 
-    stub_writer(driver, stub_auth: false) do |writer|
+    stub_writer(stub_auth: false) do |writer|
       mock(writer).get_auth_from_json_key { stub! }
     end
     assert driver.instance.writer.client.is_a?(Google::Apis::BigqueryV2::BigqueryService)
@@ -192,7 +192,7 @@ class BigQueryBaseOutputTest < Test::Unit::TestCase
         {"name": "bytes", "type": "INTEGER"}
       ]
     ])
-    stub_writer(driver, stub_auth: false) do |writer|
+    stub_writer(stub_auth: false) do |writer|
       mock.proxy(writer).get_auth_from_json_key { stub! }
     end
     assert driver.instance.writer.client.is_a?(Google::Apis::BigqueryV2::BigqueryService)
@@ -211,7 +211,7 @@ class BigQueryBaseOutputTest < Test::Unit::TestCase
       ]
     ])
 
-    stub_writer(driver, stub_auth: false) do |writer|
+    stub_writer(stub_auth: false) do |writer|
       mock.proxy(writer).get_auth_from_application_default { stub! }
     end
     assert driver.instance.writer.client.is_a?(Google::Apis::BigqueryV2::BigqueryService)
@@ -475,7 +475,7 @@ class BigQueryBaseOutputTest < Test::Unit::TestCase
       schema [{"name": "time", "type": "INTEGER"}]
     CONFIG
 
-    stub_writer(driver) do |writer|
+    stub_writer do |writer|
       mock(writer).fetch_schema('yourproject_id', 'yourdataset_id', 'foo') do
         sudo_schema_response["schema"]["fields"]
       end
@@ -544,7 +544,7 @@ class BigQueryBaseOutputTest < Test::Unit::TestCase
       </buffer>
     CONFIG
 
-    stub_writer(driver) do |writer|
+    stub_writer do |writer|
       mock(writer).fetch_schema('yourproject_id', 'yourdataset_id', 'foo') do
         sudo_schema_response["schema"]["fields"]
       end

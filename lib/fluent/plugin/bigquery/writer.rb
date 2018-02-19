@@ -112,7 +112,15 @@ module Fluent
         raise wrapped
       end
 
-      JobReference = Struct.new(:chunk_id, :chunk_id_hex, :project_id, :dataset_id, :table_id, :job_id)
+      JobReference = Struct.new(:chunk_id, :chunk_id_hex, :project_id, :dataset_id, :table_id, :job_id) do
+        def as_hash(*keys)
+          if keys.empty?
+            to_h
+          else
+            to_h.select { |k, _| keys.include?(k) }
+          end
+        end
+      end
 
       def create_load_job(chunk_id, chunk_id_hex, project, dataset, table_id, upload_source, fields)
         configuration = {
@@ -184,7 +192,7 @@ module Fluent
         job_id = job_reference.job_id
 
         res = client.get_job(project, job_id)
-        log.debug "load job fetched", id: job_id, state: res.status.state, project: job_reference.project_id, dataset: job_reference.dataset_id, table: job_reference.table_id
+        log.debug "load job fetched", id: job_id, state: res.status.state, **job_reference.as_hash(:project_id, :dataset_id, :table_id)
 
         if res.status.state == "DONE"
           res

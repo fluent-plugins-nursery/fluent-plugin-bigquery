@@ -23,6 +23,7 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
     </inject>
 
     schema_path #{SCHEMA_PATH}
+    wait_job_interval 0.1
   ]
 
   API_SCOPE = "https://www.googleapis.com/auth/bigquery"
@@ -31,7 +32,7 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
     Fluent::Test::Driver::Output.new(Fluent::Plugin::BigQueryLoadOutput).configure(conf)
   end
 
-  def stub_writer(driver, stub_auth: true)
+  def stub_writer(stub_auth: true)
     stub.proxy(Fluent::BigQuery::Writer).new.with_any_args do |writer|
       stub(writer).get_auth { nil } if stub_auth
       yield writer
@@ -40,14 +41,13 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
   end
   
   def test_write
-    driver = create_driver
     schema_fields = Fluent::BigQuery::Helper.deep_symbolize_keys(MultiJson.load(File.read(SCHEMA_PATH)))
 
     response_stub = stub!
-    job_reference = Fluent::BigQuery::Writer::JobReference.new("yourproject_id", "dummy_job_id")
 
-    stub_writer(driver) do |writer|
-      mock(writer).fetch_load_job(job_reference) { response_stub }
+    driver = create_driver
+    stub_writer do |writer|
+      mock(writer).fetch_load_job(is_a(Fluent::BigQuery::Writer::JobReference)) { response_stub }
       mock(writer).commit_load_job(is_a(String), response_stub)
 
       mock(writer.client).get_table('yourproject_id', 'yourdataset_id', 'foo') { nil }
@@ -70,9 +70,7 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
           }
         }
       }, {upload_source: duck_type(:write, :sync, :rewind), content_type: "application/octet-stream"}) do
-        s = stub!
-        s.job_reference { job_reference }
-        s
+        stub!.job_reference.stub!.job_id { "dummy_job_id" }
       end
     end
 
@@ -104,9 +102,8 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
     schema_fields = Fluent::BigQuery::Helper.deep_symbolize_keys(MultiJson.load(File.read(SCHEMA_PATH)))
 
     response_stub = stub!
-    job_reference = Fluent::BigQuery::Writer::JobReference.new("yourproject_id", "dummy_job_id")
-    stub_writer(driver) do |writer|
-      mock(writer).fetch_load_job(job_reference) { response_stub }
+    stub_writer do |writer|
+      mock(writer).fetch_load_job(is_a(Fluent::BigQuery::Writer::JobReference)) { response_stub }
       mock(writer).commit_load_job(is_a(String), response_stub)
 
       mock(writer.client).get_table('yourproject_id', 'yourdataset_id', 'foo') { nil }
@@ -130,9 +127,7 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
         },
         job_reference: {project_id: 'yourproject_id', job_id: satisfy { |x| x =~ /fluentd_job_.*/}} ,
       }, {upload_source: duck_type(:write, :sync, :rewind), content_type: "application/octet-stream"}) do
-        s = stub!
-        s.job_reference { job_reference }
-        s
+        stub!.job_reference.stub!.job_id { "dummy_job_id" }
       end
     end
 
@@ -152,8 +147,7 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
       c.append([driver.instance.format(tag, time, record)])
     end
 
-    job_reference = Fluent::BigQuery::Writer::JobReference.new("yourproject_id", "dummy_job_id")
-    stub_writer(driver) do |writer|
+    stub_writer do |writer|
       mock(writer.client).get_table('yourproject_id', 'yourdataset_id', 'foo') { nil }
 
       mock(writer.client).insert_job('yourproject_id', {
@@ -174,9 +168,7 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
           }
         }
       }, {upload_source: duck_type(:write, :sync, :rewind), content_type: "application/octet-stream"}) do
-        s = stub!
-        s.job_reference { job_reference }
-        s
+        stub!.job_reference.stub!.job_id { "dummy_job_id" }
       end
 
       mock(writer.client).get_job('yourproject_id', 'dummy_job_id') do
@@ -242,7 +234,7 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
       c.append([driver.instance.format(tag, time, record)])
     end
 
-    stub_writer(driver) do |writer|
+    stub_writer do |writer|
       mock(writer.client).get_table('yourproject_id', 'yourdataset_id', 'foo') { nil }
 
       mock(writer.client).insert_job('yourproject_id', {
@@ -263,11 +255,7 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
           }
         }
       }, {upload_source: duck_type(:write, :sync, :rewind), content_type: "application/octet-stream"}) do
-        s = stub!
-        job_reference_stub = stub!
-        s.job_reference { job_reference_stub }
-        job_reference_stub.job_id { "dummy_job_id" }
-        s
+        stub!.job_reference.stub!.job_id { "dummy_job_id" }
       end
 
       mock(writer.client).get_job('yourproject_id', 'dummy_job_id') do

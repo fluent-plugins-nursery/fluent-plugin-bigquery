@@ -172,7 +172,7 @@ module Fluent
           if response
             writer.commit_load_job(job_reference.chunk_id_hex, response)
             commit_write(job_reference.chunk_id)
-            log.debug("commit chunk", chunk: job_reference.chunk_id_hex, job_id: job_reference.job_id, project: job_reference.project_id, dataset: job_reference.dataset_id, table: job_reference.table_id)
+            log.debug("commit chunk", chunk: job_reference.chunk_id_hex, **job_reference.as_hash(:job_id, :project_id, :dataset_id, :table_id))
           else
             @polling_mutex.synchronize do
               @polling_targets << job_reference
@@ -182,7 +182,10 @@ module Fluent
           # RetryableError comes from only `commit_load_job`
           # if error is retryable, takeback chunk and do next `try_flush`
           # if error is not retryable, create custom retry_state and takeback chunk do next `try_flush`
-          unless e.retryable?
+          if e.retryable?
+            log.warn("failed to poll load job", error: e, chunk: job_reference.chunk_id_hex, **job_reference.as_hash(:job_id, :project_id, :dataset_id, :table_id))
+          else
+            log.error("failed to poll load job", error: e, chunk: job_reference.chunk_id_hex, **job_reference.as_hash(:job_id, :project_id, :dataset_id, :table_id))
             @retry_mutex.synchronize do
               if @secondary
                 # TODO: find better way
@@ -205,6 +208,9 @@ module Fluent
           end
 
           rollback_write(job_reference.chunk_id)
+        rescue => e
+          log.error("unexpected error while polling", error: e)
+          log.error_backtrace
         end
       end
 

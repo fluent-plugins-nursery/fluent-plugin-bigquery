@@ -44,7 +44,7 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
     Fluent::Test::Driver::Output.new(Fluent::Plugin::BigQueryInsertOutput).configure(conf)
   end
 
-  def stub_writer(driver, stub_auth: true)
+  def stub_writer(stub_auth: true)
     stub.proxy(Fluent::BigQuery::Writer).new.with_any_args do |writer|
       stub(writer).get_auth { nil } if stub_auth
       yield writer
@@ -120,7 +120,7 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
     entry = {a: "b"}
     driver = create_driver
 
-    stub_writer(driver) do |writer|
+    stub_writer do |writer|
       mock.proxy(writer).insert_rows('yourproject_id', 'yourdataset_id', 'foo', [{json: hash_including(entry)}], template_suffix: nil)
       mock(writer.client).insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo', {
         rows: [{json: hash_including(entry)}],
@@ -186,7 +186,7 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
       CONFIG
 
       entry = {a: "b"}
-      stub_writer(driver) do |writer|
+      stub_writer do |writer|
         mock(writer.client).insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo', {
           rows: [{json: hash_including(entry)}],
           skip_invalid_rows: false,
@@ -245,7 +245,7 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
     CONFIG
 
     entry = {a: "b"}
-    stub_writer(driver) do |writer|
+    stub_writer do |writer|
       mock(writer.client).insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo', {
         rows: [{json: hash_including(entry)}],
         skip_invalid_rows: false,
@@ -290,7 +290,7 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
       ]
     CONFIG
 
-    stub_writer(driver) do |writer|
+    stub_writer do |writer|
       mock(writer.client).insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo_2014_08_20', {
           rows: [entry[0]],
           skip_invalid_rows: false,
@@ -345,7 +345,7 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
       schema_path #{File.join(File.dirname(__FILE__), "testdata", "apache.schema")}
     CONFIG
 
-    stub_writer(driver) do |writer|
+    stub_writer do |writer|
       mock(writer).insert_rows('yourproject_id', 'yourdataset_id', 'foo', [{json: Fluent::BigQuery::Helper.deep_symbolize_keys(message)}], template_suffix: nil) do
         raise Fluent::BigQuery::RetryableError.new(nil, Google::Apis::ServerError.new("Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404, body: "Not found: Table yourproject_id:yourdataset_id.foo"))
       end
@@ -404,7 +404,7 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
       time_partitioning_expiration 1h
     CONFIG
 
-    stub_writer(driver) do |writer|
+    stub_writer do |writer|
       mock(writer).insert_rows('yourproject_id', 'yourdataset_id', 'foo', [message], template_suffix: nil) do
         raise Fluent::BigQuery::RetryableError.new(nil, Google::Apis::ServerError.new("Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404, body: "Not found: Table yourproject_id:yourdataset_id.foo"))
       end
