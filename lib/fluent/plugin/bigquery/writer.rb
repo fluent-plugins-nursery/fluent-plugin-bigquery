@@ -7,22 +7,15 @@ module Fluent
         @options = options
         @log = log
         @num_errors_per_chunk = {}
-
-        @cached_client_expiration = Time.now + 1800
       end
 
       def client
-        return @client if @client && @cached_client_expiration > Time.now
-
-        client = Google::Apis::BigqueryV2::BigqueryService.new.tap do |cl|
+        @client ||= Google::Apis::BigqueryV2::BigqueryService.new.tap do |cl|
           cl.authorization = get_auth
           cl.client_options.open_timeout_sec = @options[:open_timeout_sec] if @options[:open_timeout_sec]
           cl.client_options.read_timeout_sec = @options[:timeout_sec] if @options[:timeout_sec]
           cl.client_options.send_timeout_sec = @options[:timeout_sec] if @options[:timeout_sec]
         end
-
-        @cached_client_expiration = Time.now + 1800
-        @client = client
       end
 
       def create_table(project, dataset, table_id, record_schema)
@@ -49,10 +42,7 @@ module Fluent
           end
           client.insert_table(project, dataset, definition, {})
           log.debug "create table", project_id: project, dataset: dataset, table: table_id
-          @client = nil
         rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
-          @client = nil
-
           message = e.message
           if e.status_code == 409 && /Already Exists:/ =~ message
             log.debug "already created table", project_id: project, dataset: dataset, table: table_id
@@ -81,7 +71,6 @@ module Fluent
 
         schema
       rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
-        @client = nil
         message = e.message
         log.error "tables.get API", project_id: project, dataset: dataset, table: table_id, code: e.status_code, message: message
         nil
@@ -111,8 +100,6 @@ module Fluent
           end
         end
       rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
-        @client = nil
-
         reason = e.respond_to?(:reason) ? e.reason : nil
         error_data = { project_id: project, dataset: dataset, table: table_id, code: e.status_code, message: e.message, reason: reason }
         wrapped = Fluent::BigQuery::Error.wrap(e)
@@ -171,8 +158,6 @@ module Fluent
         )
         JobReference.new(chunk_id, chunk_id_hex, project, dataset, table_id, res.job_reference.job_id)
       rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
-        @client = nil
-
         reason = e.respond_to?(:reason) ? e.reason : nil
         log.error "job.load API", project_id: project, dataset: dataset, table: table_id, code: e.status_code, message: e.message, reason: reason
 
@@ -205,8 +190,6 @@ module Fluent
           res
         end
       rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
-        @client = nil
-
         e = Fluent::BigQuery::Error.wrap(e) 
         raise e unless e.retryable?
       end
