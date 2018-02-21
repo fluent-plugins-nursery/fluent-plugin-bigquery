@@ -7,22 +7,15 @@ module Fluent
         @options = options
         @log = log
         @num_errors_per_chunk = {}
-
-        @cached_client_expiration = Time.now + 1800
       end
 
       def client
-        return @client if @client && @cached_client_expiration > Time.now
-
-        client = Google::Apis::BigqueryV2::BigqueryService.new.tap do |cl|
+        @client ||= Google::Apis::BigqueryV2::BigqueryService.new.tap do |cl|
           cl.authorization = get_auth
           cl.client_options.open_timeout_sec = @options[:open_timeout_sec] if @options[:open_timeout_sec]
           cl.client_options.read_timeout_sec = @options[:timeout_sec] if @options[:timeout_sec]
           cl.client_options.send_timeout_sec = @options[:timeout_sec] if @options[:timeout_sec]
         end
-
-        @cached_client_expiration = Time.now + 1800
-        @client = client
       end
 
       def create_table(project, dataset, table_id, record_schema)
@@ -49,10 +42,7 @@ module Fluent
           end
           client.insert_table(project, dataset, definition, {})
           log.debug "create table", project_id: project, dataset: dataset, table: table_id
-          @client = nil
         rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
-          @client = nil
-
           message = e.message
           if e.status_code == 409 && /Already Exists:/ =~ message
             log.debug "already created table", project_id: project, dataset: dataset, table: table_id
@@ -81,7 +71,6 @@ module Fluent
 
         schema
       rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
-        @client = nil
         message = e.message
         log.error "tables.get API", project_id: project, dataset: dataset, table: table_id, code: e.status_code, message: message
         nil
@@ -111,8 +100,6 @@ module Fluent
           end
         end
       rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
-        @client = nil
-
         reason = e.respond_to?(:reason) ? e.reason : nil
         error_data = { project_id: project, dataset: dataset, table: table_id, code: e.status_code, message: e.message, reason: reason }
         wrapped = Fluent::BigQuery::Error.wrap(e)
@@ -125,7 +112,17 @@ module Fluent
         raise wrapped
       end
 
-      def create_load_job(chunk_id, project, dataset, table_id, upload_source, fields)
+      JobReference = Struct.new(:chunk_id, :chunk_id_hex, :project_id, :dataset_id, :table_id, :job_id) do
+        def as_hash(*keys)
+          if keys.empty?
+            to_h
+          else
+            to_h.select { |k, _| keys.include?(k) }
+          end
+        end
+      end
+
+      def create_load_job(chunk_id, chunk_id_hex, project, dataset, table_id, upload_source, fields)
         configuration = {
           configuration: {
             load: {
@@ -145,7 +142,7 @@ module Fluent
           }
         }
 
-        job_id = create_job_id(chunk_id, dataset, table_id, fields.to_a) if @options[:prevent_duplicate_load]
+        job_id = create_job_id(chunk_id_hex, dataset, table_id, fields.to_a) if @options[:prevent_duplicate_load]
         configuration[:configuration][:load].merge!(create_disposition: "CREATE_NEVER") if @options[:time_partitioning_type]
         configuration.merge!({job_reference: {project_id: project, job_id: job_id}}) if job_id
 
@@ -167,11 +164,8 @@ module Fluent
             content_type: "application/octet-stream",
           }
         )
-        wait_load_job(chunk_id, project, dataset, res.job_reference.job_id, table_id)
-        @num_errors_per_chunk.delete(chunk_id)
+        JobReference.new(chunk_id, chunk_id_hex, project, dataset, table_id, res.job_reference.job_id)
       rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
-        @client = nil
-
         reason = e.respond_to?(:reason) ? e.reason : nil
         log.error "job.load API", project_id: project, dataset: dataset, table: table_id, code: e.status_code, message: e.message, reason: reason
 
@@ -187,44 +181,56 @@ module Fluent
         end
 
         if job_id && e.status_code == 409 && e.message =~ /Job/ # duplicate load job
-          wait_load_job(chunk_id, project, dataset, job_id, table_id) 
-          @num_errors_per_chunk.delete(chunk_id)
-          return
+          return JobReference.new(chunk_id, chunk_id_hex, project, dataset, table_id, job_id)
         end
 
         raise Fluent::BigQuery::Error.wrap(e)
       end
 
-      def wait_load_job(chunk_id, project, dataset, job_id, table_id)
-        wait_interval = 10
-        _response = client.get_job(project, job_id)
+      def fetch_load_job(job_reference)
+        project = job_reference.project_id
+        job_id = job_reference.job_id
 
-        until _response.status.state == "DONE"
-          log.debug "wait for load job finish", state: _response.status.state, job_id: _response.job_reference.job_id
-          sleep wait_interval
-          _response = client.get_job(project, _response.job_reference.job_id)
+        res = client.get_job(project, job_id)
+        log.debug "load job fetched", id: job_id, state: res.status.state, **job_reference.as_hash(:project_id, :dataset_id, :table_id)
+
+        if res.status.state == "DONE"
+          res
         end
+      rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
+        e = Fluent::BigQuery::Error.wrap(e) 
+        raise e unless e.retryable?
+      end
 
-        errors = _response.status.errors
+      def commit_load_job(chunk_id_hex, response)
+        job_id = response.id
+        project = response.configuration.load.destination_table.project_id
+        dataset = response.configuration.load.destination_table.dataset_id
+        table_id = response.configuration.load.destination_table.table_id
+
+        errors = response.status.errors
         if errors
           errors.each do |e|
-            log.error "job.insert API (rows)", job_id: job_id, project_id: project, dataset: dataset, table: table_id, message: e.message, reason: e.reason
+            log.error "job.load API (rows)", job_id: job_id, project_id: project, dataset: dataset, table: table_id, message: e.message, reason: e.reason
           end
         end
 
-        error_result = _response.status.error_result
+        error_result = response.status.error_result
         if error_result
-          log.error "job.insert API (result)", job_id: job_id, project_id: project, dataset: dataset, table: table_id, message: error_result.message, reason: error_result.reason
+          log.error "job.load API (result)", job_id: job_id, project_id: project, dataset: dataset, table: table_id, message: error_result.message, reason: error_result.reason
           if Fluent::BigQuery::Error.retryable_error_reason?(error_result.reason)
-            @num_errors_per_chunk[chunk_id] = @num_errors_per_chunk[chunk_id].to_i + 1
+            @num_errors_per_chunk[chunk_id_hex] = @num_errors_per_chunk[chunk_id_hex].to_i + 1
             raise Fluent::BigQuery::RetryableError.new("failed to load into bigquery, retry")
           else
-            @num_errors_per_chunk.delete(chunk_id)
+            @num_errors_per_chunk.delete(chunk_id_hex)
             raise Fluent::BigQuery::UnRetryableError.new("failed to load into bigquery, and cannot retry")
           end
         end
 
-        log.debug "finish load job", state: _response.status.state
+        stats = response.statistics.load
+        duration = (response.statistics.end_time - response.statistics.creation_time) / 1000.0
+        log.debug "load job finished", id: job_id, state: response.status.state, input_file_bytes: stats.input_file_bytes, input_files: stats.input_files, output_bytes: stats.output_bytes, output_rows: stats.output_rows, bad_records: stats.bad_records, duration: duration.round(2), project_id: project, dataset: dataset, table: table_id
+        @num_errors_per_chunk.delete(chunk_id_hex)
       end
 
       private
@@ -291,8 +297,8 @@ module Fluent
         table_id.gsub(/\$\d+$/, "")
       end
 
-      def create_job_id(chunk_id, dataset, table, schema)
-        job_id_key = "#{chunk_id}#{dataset}#{table}#{schema.to_s}#{@options[:max_bad_records]}#{@options[:ignore_unknown_values]}#{@num_errors_per_chunk[chunk_id]}"
+      def create_job_id(chunk_id_hex, dataset, table, schema)
+        job_id_key = "#{chunk_id_hex}#{dataset}#{table}#{schema.to_s}#{@options[:max_bad_records]}#{@options[:ignore_unknown_values]}#{@num_errors_per_chunk[chunk_id_hex]}"
         @log.debug "job_id_key: #{job_id_key}"
         "fluentd_job_" + Digest::SHA1.hexdigest(job_id_key)
       end
