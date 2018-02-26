@@ -7,21 +7,6 @@ module Fluent
 
       helpers :timer
 
-      ### default for loads
-      def configure_for_load(conf)
-        raise ConfigError unless conf["method"] == "load"
-
-        formatter_config = conf.elements("format")[0]
-        @formatter = formatter_create(usage: 'out_bigquery_for_load', conf: formatter_config, default_type: 'json')
-
-        buffer_config = conf.elements("buffer")[0]
-        return unless buffer_config
-        buffer_config["@type"]                       = "file"         unless buffer_config["@type"]
-        buffer_config["flush_mode"]                  = :interval      unless buffer_config["flush_mode"]
-        buffer_config["chunk_limit_size"]            = 1 * 1024 ** 3  unless buffer_config["chunk_limit_size"] # 1GB
-        buffer_config["total_limit_size"]            = 32 * 1024 ** 3 unless buffer_config["total_limit_size"] # 32GB
-      end
-
       config_param :source_format, :enum, list: [:json, :avro, :csv], default: :json
 
       # max_bad_records (only load)
