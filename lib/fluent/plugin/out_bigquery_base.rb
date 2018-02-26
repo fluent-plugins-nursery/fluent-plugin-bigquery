@@ -109,7 +109,7 @@ module Fluent
         end
 
         formatter_config = conf.elements("format")[0]
-        @formatter = formatter_create(usage: 'out_bigquery_for_insert', type: 'json', conf: formatter_config)
+        @formatter = formatter_create(usage: 'out_bigquery_for_insert', default_type: 'json', conf: formatter_config)
       end
 
       def start
