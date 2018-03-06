@@ -1,5 +1,7 @@
 # fluent-plugin-bigquery
 
+**This README is for v2.0.0.beta. but it is not released yet. sorry.**
+
 [Fluentd](http://fluentd.org) output plugin to load/insert data into Google BigQuery.
 
 - **Plugin type**: Output
@@ -57,6 +59,7 @@ Because embbeded gem dependency sometimes restricts ruby environment.
 | request_open_timeout_sec               | integer       | no                                           | no           | 60                         | Bigquery API connection, and request timeout. If you send big data to Bigquery, set large value.       |
 | time_partitioning_type                 | enum          | no (either day)                              | no           | nil                        | Type of bigquery time partitioning feature(experimental feature on BigQuery).                          |
 | time_partitioning_expiration           | time          | no                                           | no           | nil                        | Expiration milliseconds for bigquery time partitioning. (experimental feature on BigQuery)             |
+
 #### bigquery_insert
 
 | name                                   | type          | required?    | placeholder? | default                    | description                                                                                                                                                                                |
