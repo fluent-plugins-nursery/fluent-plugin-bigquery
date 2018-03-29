@@ -1,6 +1,6 @@
 # fluent-plugin-bigquery
 
-**This README is for v2.0.0.beta. but it is not released yet. sorry.**
+**This README is for v2.0.0.beta**
 
 [Fluentd](http://fluentd.org) output plugin to load/insert data into Google BigQuery.
 
