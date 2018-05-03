@@ -37,6 +37,7 @@ module Fluent
           if @options[:time_partitioning_type]
             definition[:time_partitioning] = {
               type: @options[:time_partitioning_type].to_s.upcase,
+              field: @options[:time_partitioning_field].to_s,
               expiration_ms: @options[:time_partitioning_expiration] ? @options[:time_partitioning_expiration] * 1000 : nil
             }.select { |_, value| !value.nil? }
           end

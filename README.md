@@ -58,6 +58,7 @@ Because embbeded gem dependency sometimes restricts ruby environment.
 | request_timeout_sec                    | integer       | no                                           | no           | nil                        | Bigquery API response timeout                                                                          |
 | request_open_timeout_sec               | integer       | no                                           | no           | 60                         | Bigquery API connection, and request timeout. If you send big data to Bigquery, set large value.       |
 | time_partitioning_type                 | enum          | no (either day)                              | no           | nil                        | Type of bigquery time partitioning feature(experimental feature on BigQuery).                          |
+| time_partitioning_field                | string        | no                                           | no           | nil                        | Field used to determine how to create a time-based partition(experimental feature on BigQuery).        |
 | time_partitioning_expiration           | time          | no                                           | no           | nil                        | Expiration milliseconds for bigquery time partitioning. (experimental feature on BigQuery)             |
 
 #### bigquery_insert
