@@ -401,6 +401,7 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
       schema_path #{File.join(File.dirname(__FILE__), "testdata", "apache.schema")}
 
       time_partitioning_type day
+      time_partitioning_field time
       time_partitioning_expiration 1h
     CONFIG
 
