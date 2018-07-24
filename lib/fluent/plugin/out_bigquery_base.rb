@@ -184,7 +184,7 @@ module Fluent
             table_schema.load_schema(schema)
             @fetched_schemas["#{project}.#{dataset}.#{table_id}"] = table_schema
           else
-            if @fetched_schemas["#{project}.#{dataset}.#{table_id}"].empty?
+            if @fetched_schemas["#{project}.#{dataset}.#{table_id}"].nil?
               raise "failed to fetch schema from bigquery"
             else
               log.warn "#{table_id} uses previous schema"
