@@ -228,9 +228,10 @@ module Fluent
           end
         end
 
+        # `stats` can be nil if we receive a warning like "Warning: Load job succeeded with data imported, however statistics may be lost due to internal error."
         stats = response.statistics.load
         duration = (response.statistics.end_time - response.statistics.creation_time) / 1000.0
-        log.debug "load job finished", id: job_id, state: response.status.state, input_file_bytes: stats.input_file_bytes, input_files: stats.input_files, output_bytes: stats.output_bytes, output_rows: stats.output_rows, bad_records: stats.bad_records, duration: duration.round(2), project_id: project, dataset: dataset, table: table_id
+        log.debug "load job finished", id: job_id, state: response.status.state, input_file_bytes: stats&.input_file_bytes, input_files: stats&.input_files, output_bytes: stats&.output_bytes, output_rows: stats&.output_rows, bad_records: stats&.bad_records, duration: duration.round(2), project_id: project, dataset: dataset, table: table_id
         @num_errors_per_chunk.delete(chunk_id_hex)
       end
 
