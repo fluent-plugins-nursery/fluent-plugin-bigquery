@@ -39,10 +39,8 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
       writer
     end
   end
-  
-  def test_write
-    schema_fields = Fluent::BigQuery::Helper.deep_symbolize_keys(MultiJson.load(File.read(SCHEMA_PATH)))
 
+  def test_write
     response_stub = stub!
 
     driver = create_driver
@@ -59,9 +57,6 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
               project_id: 'yourproject_id',
               dataset_id: 'yourdataset_id',
               table_id: 'foo',
-            },
-            schema: {
-              fields: schema_fields,
             },
             write_disposition: "WRITE_APPEND",
             source_format: "NEWLINE_DELIMITED_JSON",
@@ -99,7 +94,6 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
       schema_path #{SCHEMA_PATH}
       prevent_duplicate_load true
     CONFIG
-    schema_fields = Fluent::BigQuery::Helper.deep_symbolize_keys(MultiJson.load(File.read(SCHEMA_PATH)))
 
     response_stub = stub!
     stub_writer do |writer|
@@ -115,9 +109,6 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
               project_id: 'yourproject_id',
               dataset_id: 'yourdataset_id',
               table_id: 'foo',
-            },
-            schema: {
-              fields: schema_fields,
             },
             write_disposition: "WRITE_APPEND",
             source_format: "NEWLINE_DELIMITED_JSON",
@@ -138,7 +129,6 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
 
   def test_write_with_retryable_error
     driver = create_driver
-    schema_fields = Fluent::BigQuery::Helper.deep_symbolize_keys(MultiJson.load(File.read(SCHEMA_PATH)))
 
     driver.instance_start
     tag, time, record = "tag", Time.now.to_i, {"a" => "b"}
@@ -157,9 +147,6 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
               project_id: 'yourproject_id',
               dataset_id: 'yourdataset_id',
               table_id: 'foo',
-            },
-            schema: {
-              fields: schema_fields,
             },
             write_disposition: "WRITE_APPEND",
             source_format: "NEWLINE_DELIMITED_JSON",
@@ -225,7 +212,6 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
         utc
       </secondary>
     CONFIG
-    schema_fields = Fluent::BigQuery::Helper.deep_symbolize_keys(MultiJson.load(File.read(SCHEMA_PATH)))
 
     driver.instance_start
     tag, time, record = "tag", Time.now.to_i, {"a" => "b"}
@@ -244,9 +230,6 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
               project_id: 'yourproject_id',
               dataset_id: 'yourdataset_id',
               table_id: 'foo',
-            },
-            schema: {
-              fields: schema_fields,
             },
             write_disposition: "WRITE_APPEND",
             source_format: "NEWLINE_DELIMITED_JSON",
@@ -287,6 +270,61 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
     end
     assert_in_delta driver.instance.retry.secondary_transition_at , Time.now, 0.1
     driver.instance_shutdown
+  end
+
+  def test_write_with_auto_create_table
+    driver = create_driver(<<-CONFIG)
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      <buffer>
+        @type memory
+      </buffer>
+
+      <inject>
+      time_format %s
+      time_key  time
+      </inject>
+
+      auto_create_table true
+      schema_path #{SCHEMA_PATH}
+    CONFIG
+
+    schema_fields = Fluent::BigQuery::Helper.deep_symbolize_keys(MultiJson.load(File.read(SCHEMA_PATH)))
+
+    stub_writer do |writer|
+      mock(writer.client).get_table('yourproject_id', 'yourdataset_id', 'foo') do
+        raise Google::Apis::ClientError.new("notFound: Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404)
+      end
+
+      mock(writer.client).insert_job('yourproject_id', {
+        configuration: {
+          load: {
+            destination_table: {
+              project_id: 'yourproject_id',
+              dataset_id: 'yourdataset_id',
+              table_id: 'foo',
+            },
+            write_disposition: "WRITE_APPEND",
+            source_format: "NEWLINE_DELIMITED_JSON",
+            ignore_unknown_values: false,
+            max_bad_records: 0,
+            schema: {
+              fields: schema_fields,
+            },
+          }
+        }
+      }, {upload_source: duck_type(:write, :sync, :rewind), content_type: "application/octet-stream"}) do
+        stub!.job_reference.stub!.job_id { "dummy_job_id" }
+      end
+    end
+
+    driver.run do
+      driver.feed("tag", Time.now.to_i, {"a" => "b"})
+    end
   end
 
   private

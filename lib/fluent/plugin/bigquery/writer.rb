@@ -34,13 +34,7 @@ module Fluent
             }
           }
 
-          if @options[:time_partitioning_type]
-            definition[:time_partitioning] = {
-              type: @options[:time_partitioning_type].to_s.upcase,
-              field: @options[:time_partitioning_field] ? @options[:time_partitioning_field].to_s : nil,
-              expiration_ms: @options[:time_partitioning_expiration] ? @options[:time_partitioning_expiration] * 1000 : nil
-            }.select { |_, value| !value.nil? }
-          end
+          definition.merge!(time_partitioning: time_partitioning) if time_partitioning
           client.insert_table(project, dataset, definition, {})
           log.debug "create table", project_id: project, dataset: dataset, table: table_id
         rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
@@ -132,9 +126,6 @@ module Fluent
                 dataset_id: dataset,
                 table_id: table_id,
               },
-              schema: {
-                fields: fields.to_a,
-              },
               write_disposition: "WRITE_APPEND",
               source_format: source_format,
               ignore_unknown_values: @options[:ignore_unknown_values],
@@ -144,17 +135,18 @@ module Fluent
         }
 
         job_id = create_job_id(chunk_id_hex, dataset, table_id, fields.to_a) if @options[:prevent_duplicate_load]
-        configuration[:configuration][:load].merge!(create_disposition: "CREATE_NEVER") if @options[:time_partitioning_type]
         configuration.merge!({job_reference: {project_id: project, job_id: job_id}}) if job_id
 
-        # If target table is already exist, omit schema configuration.
-        # Because schema changing is easier.
         begin
-          if client.get_table(project, dataset, table_id)
-            configuration[:configuration][:load].delete(:schema)
+          # Check table existance
+          client.get_table(project, dataset, table_id)
+        rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
+          if e.status_code == 404 && /Not Found: Table/i =~ e.message
+            raise Fluent::BigQuery::UnRetryableError.new("Table is not found") unless @options[:auto_create_table]
+            raise Fluent::BigQuery::UnRetryableError.new("Schema is empty") if fields.empty?
+            configuration[:configuration][:load].merge!(schema: {fields: fields.to_a})
+            configuration[:configuration][:load].merge!(time_partitioning: time_partitioning) if time_partitioning
           end
-        rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError
-          raise Fluent::BigQuery::UnRetryableError.new("Schema is empty") if fields.empty?
         end
 
         res = client.insert_job(
@@ -169,17 +161,6 @@ module Fluent
       rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
         reason = e.respond_to?(:reason) ? e.reason : nil
         log.error "job.load API", project_id: project, dataset: dataset, table: table_id, code: e.status_code, message: e.message, reason: reason
-
-        if @options[:auto_create_table] && e.status_code == 404 && /Not Found: Table/i =~ e.message
-          # Table Not Found: Auto Create Table
-          create_table(
-            project,
-            dataset,
-            table_id,
-            fields,
-          )
-          raise "table created. send rows next time."
-        end
 
         if job_id && e.status_code == 409 && e.message =~ /Job/ # duplicate load job
           return JobReference.new(chunk_id, chunk_id_hex, project, dataset, table_id, job_id)
@@ -315,6 +296,20 @@ module Fluent
           "CSV"
         else
           "NEWLINE_DELIMITED_JSON"
+        end
+      end
+
+      def time_partitioning
+        return @time_partitioning if instance_variable_defined?(:@time_partitioning)
+
+        if @options[:time_partitioning_type]
+          @time_partitioning = {
+            type: @options[:time_partitioning_type].to_s.upcase,
+            field: @options[:time_partitioning_field] ? @options[:time_partitioning_field].to_s : nil,
+            expiration_ms: @options[:time_partitioning_expiration] ? @options[:time_partitioning_expiration] * 1000 : nil
+          }.compact
+        else
+          @time_partitioning
         end
       end
     end
