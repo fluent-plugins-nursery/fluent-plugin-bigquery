@@ -71,14 +71,19 @@ module Fluent
         nil
       end
 
-      def insert_rows(project, dataset, table_id, rows, template_suffix: nil)
+      def insert_rows(project, dataset, table_id, rows, schema, template_suffix: nil)
         body = {
           rows: rows,
           skip_invalid_rows: @options[:skip_invalid_rows],
           ignore_unknown_values: @options[:ignore_unknown_values],
         }
         body.merge!(template_suffix: template_suffix) if template_suffix
-        res = client.insert_all_table_data(project, dataset, table_id, body, {})
+
+        if @options[:auto_create_table]
+          res = insert_all_table_data_with_create_table(project, dataset, table_id, body, schema)
+        else
+          res = client.insert_all_table_data(project, dataset, table_id, body, {})
+        end
         log.debug "insert rows", project_id: project, dataset: dataset, table: table_id, count: rows.size
 
         if res.insert_errors && !res.insert_errors.empty?
@@ -311,6 +316,28 @@ module Fluent
         else
           @time_partitioning
         end
+      end
+
+      def insert_all_table_data_with_create_table(project, dataset, table_id, body, schema)
+        try_count ||= 1
+        res = client.insert_all_table_data(project, dataset, table_id, body, {})
+      rescue Google::Apis::ClientError => e
+        if e.status_code == 404 && /Not Found: Table/i =~ e.message
+          if try_count == 1
+            # Table Not Found: Auto Create Table
+            create_table(project, dataset, table_id, schema)
+          elsif try_count > 10
+            raise "A new table was created but it is not found."
+          end
+
+          # Retry to insert several times because the created table is not visible from Streaming insert for a little while
+          # cf. https://cloud.google.com/bigquery/troubleshooting-errors#metadata-errors-for-streaming-inserts
+          try_count += 1
+          sleep 5
+          log.debug "Retry to insert rows", project_id: project, dataset: dataset, table: table_id
+          retry
+        end
+        raise
       end
     end
   end

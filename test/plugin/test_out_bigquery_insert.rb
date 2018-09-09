@@ -121,7 +121,6 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
     driver = create_driver
 
     stub_writer do |writer|
-      mock.proxy(writer).insert_rows('yourproject_id', 'yourdataset_id', 'foo', [{json: hash_including(entry)}], template_suffix: nil)
       mock(writer.client).insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo', {
         rows: [{json: hash_including(entry)}],
         skip_invalid_rows: false,
@@ -346,9 +345,16 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
     CONFIG
 
     stub_writer do |writer|
-      mock(writer).insert_rows('yourproject_id', 'yourdataset_id', 'foo', [{json: Fluent::BigQuery::Helper.deep_symbolize_keys(message)}], template_suffix: nil) do
-        raise Fluent::BigQuery::RetryableError.new(nil, Google::Apis::ServerError.new("Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404, body: "Not found: Table yourproject_id:yourdataset_id.foo"))
-      end
+      body = {
+        rows: [{json: Fluent::BigQuery::Helper.deep_symbolize_keys(message)}],
+        skip_invalid_rows: false,
+        ignore_unknown_values: false,
+      }
+      mock(writer.client).insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo', body, {}) do
+        raise Google::Apis::ClientError.new("notFound: Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404)
+      end.at_least(1)
+      mock(writer).sleep(instance_of(Numeric)) { nil }.at_least(1)
+
       mock(writer).create_table('yourproject_id', 'yourdataset_id', 'foo', driver.instance.instance_variable_get(:@table_schema))
     end
 
@@ -406,9 +412,16 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
     CONFIG
 
     stub_writer do |writer|
-      mock(writer).insert_rows('yourproject_id', 'yourdataset_id', 'foo', [message], template_suffix: nil) do
-        raise Fluent::BigQuery::RetryableError.new(nil, Google::Apis::ServerError.new("Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404, body: "Not found: Table yourproject_id:yourdataset_id.foo"))
-      end
+      body = {
+        rows: [message],
+        skip_invalid_rows: false,
+        ignore_unknown_values: false,
+      }
+      mock(writer.client).insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo', body, {}) do
+        raise Google::Apis::ClientError.new("notFound: Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404)
+      end.at_least(1)
+      mock(writer).sleep(instance_of(Numeric)) { nil }.at_least(1)
+
       mock(writer).create_table('yourproject_id', 'yourdataset_id', 'foo', driver.instance.instance_variable_get(:@table_schema))
     end
 
