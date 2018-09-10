@@ -355,7 +355,14 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
       end.at_least(1)
       mock(writer).sleep(instance_of(Numeric)) { nil }.at_least(1)
 
-      mock(writer).create_table('yourproject_id', 'yourdataset_id', 'foo', driver.instance.instance_variable_get(:@table_schema))
+      mock(writer.client).insert_table('yourproject_id', 'yourdataset_id', {
+        table_reference: {
+          table_id: 'foo',
+        },
+        schema: {
+          fields: driver.instance.instance_variable_get(:@table_schema).to_a,
+        },
+      }, {})
     end
 
     assert_raise(RuntimeError) do
@@ -422,7 +429,19 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
       end.at_least(1)
       mock(writer).sleep(instance_of(Numeric)) { nil }.at_least(1)
 
-      mock(writer).create_table('yourproject_id', 'yourdataset_id', 'foo', driver.instance.instance_variable_get(:@table_schema))
+      mock(writer.client).insert_table('yourproject_id', 'yourdataset_id', {
+        table_reference: {
+          table_id: 'foo',
+        },
+        schema: {
+          fields: driver.instance.instance_variable_get(:@table_schema).to_a,
+        },
+        time_partitioning: {
+          type: 'DAY',
+          field: 'time',
+          expiration_ms: 3600000,
+        },
+      }, {})
     end
 
     assert_raise(RuntimeError) do
