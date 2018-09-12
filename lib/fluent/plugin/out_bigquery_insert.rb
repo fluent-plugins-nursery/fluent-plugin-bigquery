@@ -96,14 +96,8 @@ module Fluent
       end
 
       def insert(project, dataset, table_id, rows, schema, template_suffix)
-        writer.insert_rows(project, dataset, table_id, rows, template_suffix: template_suffix)
+        writer.insert_rows(project, dataset, table_id, rows, schema, template_suffix: template_suffix)
       rescue Fluent::BigQuery::Error => e
-        if @auto_create_table && e.status_code == 404 && /Not Found: Table/i =~ e.message
-          # Table Not Found: Auto Create Table
-          writer.create_table(project, dataset, table_id, schema)
-          raise "table created. send rows next time."
-        end
-
         raise if e.retryable?
 
         if @secondary
