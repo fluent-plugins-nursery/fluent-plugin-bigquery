@@ -441,6 +441,7 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
           type: 'DAY',
           field: 'time',
           expiration_ms: 3600000,
+          require_partition_filter: true
         },
       }, {})
     end
