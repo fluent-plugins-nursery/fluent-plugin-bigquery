@@ -45,10 +45,9 @@ module Fluent
             return
           end
 
-          reason = e.respond_to?(:reason) ? e.reason : nil
-          log.error "tables.insert API", project_id: project, dataset: dataset, table: table_id, code: e.status_code, message: message, reason: reason
+          log.error "tables.insert API", project_id: project, dataset: dataset, table: table_id, code: e.status_code, message: message
 
-          if Fluent::BigQuery::Error.retryable_error_reason?(reason) && create_table_retry_count < create_table_retry_limit
+          if create_table_retry_count < create_table_retry_limit
             sleep create_table_retry_wait
             create_table_retry_wait *= 2
             create_table_retry_count += 1
@@ -100,8 +99,7 @@ module Fluent
           end
         end
       rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
-        reason = e.respond_to?(:reason) ? e.reason : nil
-        error_data = { project_id: project, dataset: dataset, table: table_id, code: e.status_code, message: e.message, reason: reason }
+        error_data = { project_id: project, dataset: dataset, table: table_id, code: e.status_code, message: e.message }
         wrapped = Fluent::BigQuery::Error.wrap(e)
         if wrapped.retryable?
           log.warn "tabledata.insertAll API", error_data
@@ -164,8 +162,7 @@ module Fluent
         )
         JobReference.new(chunk_id, chunk_id_hex, project, dataset, table_id, res.job_reference.job_id)
       rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
-        reason = e.respond_to?(:reason) ? e.reason : nil
-        log.error "job.load API", project_id: project, dataset: dataset, table: table_id, code: e.status_code, message: e.message, reason: reason
+        log.error "job.load API", project_id: project, dataset: dataset, table: table_id, code: e.status_code, message: e.message
 
         if job_id && e.status_code == 409 && e.message =~ /Job/ # duplicate load job
           return JobReference.new(chunk_id, chunk_id_hex, project, dataset, table_id, job_id)

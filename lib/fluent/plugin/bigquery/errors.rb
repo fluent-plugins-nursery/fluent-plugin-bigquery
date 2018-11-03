@@ -7,10 +7,9 @@ module Fluent
       RETRYABLE_STATUS_CODE = [500, 502, 503, 504]
 
       class << self
-        def wrap(google_api_error, message = nil, force_unretryable: false)
-          e = google_api_error
-          return UnRetryableError.new(message, e) if force_unretryable
-
+        # @param e [Google::Apis::Error]
+        # @param message [String]
+        def wrap(e, message = nil)
           if retryable_error?(e)
             RetryableError.new(message, e)
           else
@@ -18,12 +17,9 @@ module Fluent
           end
         end
 
-        def retryable_error?(google_api_error)
-          e = google_api_error
-          reason = e.respond_to?(:reason) ? e.reason : nil
-
-          retryable_error_reason?(reason) ||
-            (e.is_a?(Google::Apis::ServerError) && RETRYABLE_STATUS_CODE.include?(e.status_code))
+        # @param e [Google::Apis::Error]
+        def retryable_error?(e)
+          e.is_a?(Google::Apis::ServerError) && RETRYABLE_STATUS_CODE.include?(e.status_code)
         end
 
         def retryable_error_reason?(reason)
