@@ -196,6 +196,7 @@ module Fluent
         rescue => e
           log.error("unexpected error while polling", error: e)
           log.error_backtrace
+          rollback_write(job_reference.chunk_id)
         end
       end
 
