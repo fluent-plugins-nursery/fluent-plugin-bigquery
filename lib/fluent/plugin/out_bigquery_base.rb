@@ -69,6 +69,7 @@ module Fluent
       config_param :time_partitioning_type, :enum, list: [:day], default: nil
       config_param :time_partitioning_field, :string, default: nil
       config_param :time_partitioning_expiration, :time, default: nil
+      config_param :time_partitioning_require_partition_filter, :bool, default: false
 
       ## Formatter
       config_section :format do
@@ -139,8 +140,9 @@ module Fluent
           prevent_duplicate_load: @prevent_duplicate_load,
           auto_create_table: @auto_create_table,
           time_partitioning_type: @time_partitioning_type,
-          time_partitioning_field: time_partitioning_field,
+          time_partitioning_field: @time_partitioning_field,
           time_partitioning_expiration: @time_partitioning_expiration,
+          time_partitioning_require_partition_filter: @time_partitioning_require_partition_filter,
           timeout_sec: @request_timeout_sec,
           open_timeout_sec: @request_open_timeout_sec,
         })
