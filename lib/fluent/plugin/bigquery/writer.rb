@@ -174,8 +174,9 @@ module Fluent
       def fetch_load_job(job_reference)
         project = job_reference.project_id
         job_id = job_reference.job_id
+        location = @options[:location]
 
-        res = client.get_job(project, job_id)
+        res = client.get_job(project, job_id, location: location)
         log.debug "load job fetched", id: job_id, state: res.status.state, **job_reference.as_hash(:project_id, :dataset_id, :table_id)
 
         if res.status.state == "DONE"
