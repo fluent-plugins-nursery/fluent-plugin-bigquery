@@ -29,6 +29,9 @@ module Fluent
       config_param :private_key_path, :string, default: nil
       config_param :private_key_passphrase, :string, default: 'notasecret', secret: true
       config_param :json_key, default: nil, secret: true
+      # The geographic location of the job. Required except for US and EU.
+      # https://github.com/googleapis/google-api-ruby-client/blob/master/generated/google/apis/bigquery_v2/service.rb#L350
+      config_param :location, :string, default: nil
 
       # see as simple reference
       #   https://github.com/abronte/BigQuery/blob/master/lib/bigquery.rb
@@ -132,6 +135,7 @@ module Fluent
           private_key_path: @private_key_path, private_key_passphrase: @private_key_passphrase,
           email: @email,
           json_key: @json_key,
+          location: @location,
           source_format: @source_format,
           skip_invalid_rows: @skip_invalid_rows,
           ignore_unknown_values: @ignore_unknown_values,
