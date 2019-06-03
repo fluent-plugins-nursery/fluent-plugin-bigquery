@@ -73,6 +73,9 @@ module Fluent
       config_param :time_partitioning_field, :string, default: nil
       config_param :time_partitioning_expiration, :time, default: nil
 
+      ## Clustering
+      config_param :clustering_fields, :array, default: nil
+
       ## Formatter
       config_section :format do
         config_set_default :@type, 'json'
@@ -145,6 +148,7 @@ module Fluent
           time_partitioning_type: @time_partitioning_type,
           time_partitioning_field: @time_partitioning_field,
           time_partitioning_expiration: @time_partitioning_expiration,
+          clustering_fields: @clustering_fields,
           timeout_sec: @request_timeout_sec,
           open_timeout_sec: @request_open_timeout_sec,
         })

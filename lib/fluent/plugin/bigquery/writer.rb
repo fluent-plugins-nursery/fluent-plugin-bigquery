@@ -35,6 +35,7 @@ module Fluent
           }
 
           definition.merge!(time_partitioning: time_partitioning) if time_partitioning
+          definition.merge!(clustering: clustering) if clustering
           client.insert_table(project, dataset, definition, {})
           log.debug "create table", project_id: project, dataset: dataset, table: table_id
         rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
@@ -149,6 +150,7 @@ module Fluent
             raise Fluent::BigQuery::UnRetryableError.new("Schema is empty") if fields.empty?
             configuration[:configuration][:load].merge!(schema: {fields: fields.to_a})
             configuration[:configuration][:load].merge!(time_partitioning: time_partitioning) if time_partitioning
+            configuration[:configuration][:load].merge!(clustering: clustering) if clustering
           end
         end
 
@@ -313,6 +315,18 @@ module Fluent
           }.reject { |_, v| v.nil? }
         else
           @time_partitioning
+        end
+      end
+
+      def clustering
+        return @clustering if instance_variable_defined?(:@clustering)
+
+        if @options[:clustering_fields]
+          @clustering = {
+            fields: @options[:clustering_fields]
+          }
+        else
+          @clustering
         end
       end
 
