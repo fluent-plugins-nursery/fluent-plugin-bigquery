@@ -1,3 +1,4 @@
+require 'avro'
 require 'fluent/plugin/out_bigquery_base'
 
 module Fluent
@@ -36,6 +37,10 @@ module Fluent
 
       def configure(conf)
         super
+        if @source_format == :avro
+          @avro_schema = Avro::Schema.parse(@formatter.schema_json)
+          @avro_writer = create_avro_writer
+        end
 
         placeholder_params = "project=#{@project}/dataset=#{@dataset}/table=#{@tablelist.join(",")}/fetch_schema_table=#{@fetch_schema_table}"
         placeholder_validate!(:bigquery_load, placeholder_params)
@@ -58,6 +63,9 @@ module Fluent
 
       # for Fluent::Plugin::Output#implement? method
       def format(tag, time, record)
+        if @source_format == :avro
+          @avro_writer.block_count += 1
+        end
         super
       end
 
@@ -204,7 +212,20 @@ module Fluent
         chunk_is_file = @buffer_config["@type"] == 'file'
         if chunk_is_file
           File.open(chunk.path) do |file|
-            yield file
+            if @source_format == :avro
+              @avro_writer.buffer_writer.write(file.read)
+              @avro_writer.close
+              Tempfile.open("chunk-tmp") do |f|
+                f.binmode
+                f.write(@avro_buffer.string)
+                @avro_writer = create_avro_writer
+                f.sync
+                f.rewind
+                yield f
+              end
+            else
+              yield file
+            end
           end
         else
           Tempfile.open("chunk-tmp") do |file|
@@ -215,6 +236,11 @@ module Fluent
             yield file
           end
         end
+      end
+
+      def create_avro_writer
+        @avro_buffer = StringIO.new
+        Avro::DataFile::Writer.new(@avro_buffer, Avro::IO::DatumWriter.new(@avro_schema), @avro_schema)
       end
     end
   end
