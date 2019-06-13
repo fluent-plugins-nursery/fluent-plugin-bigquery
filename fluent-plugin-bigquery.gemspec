@@ -23,6 +23,7 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "test-unit"
   spec.add_development_dependency "test-unit-rr"
 
+  spec.add_runtime_dependency "avro"
   spec.add_runtime_dependency "google-api-client", ">= 0.11.0"
   spec.add_runtime_dependency "googleauth", ">= 0.5.0"
   spec.add_runtime_dependency "multi_json"
