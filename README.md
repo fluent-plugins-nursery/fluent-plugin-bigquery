@@ -434,7 +434,7 @@ Use placeholder.
 
 ```apache
 <match dummy>
-  @type bigquery_insert
+  @type bigquery_load
 
   ...
   table   accesslog$%Y%m%d
@@ -447,6 +447,8 @@ Use placeholder.
 ```
 
 But, Dynamic table creating doesn't support date partitioned table yet.
+And streaming insert is not allowed to insert with `$%Y%m%d` suffix.
+If you use date partitioned table with streaming insert, Please omit `$%Y%m%d` suffix from `table`.
 
 ### Dynamic table creating
 
