@@ -61,7 +61,6 @@ Because embbeded gem dependency sometimes restricts ruby environment.
 | time_partitioning_type                        | enum          | no (either day)                              | no           | nil                        | Type of bigquery time partitioning feature(experimental feature on BigQuery).                          |
 | time_partitioning_field                       | string        | no                                           | no           | nil                        | Field used to determine how to create a time-based partition(experimental feature on BigQuery).        |
 | time_partitioning_expiration                  | time          | no                                           | no           | nil                        | Expiration milliseconds for bigquery time partitioning. (experimental feature on BigQuery)             |
-| time_partitioning_require_partition_filter    | bool          | no                                           | no           | false                      | If true, queries over this table require a partition filter that can be used for partition elimination to be specified. (experimental feature on BigQuery) |
 
 #### bigquery_insert
 
