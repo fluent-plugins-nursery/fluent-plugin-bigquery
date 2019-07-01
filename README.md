@@ -61,7 +61,7 @@ Because embbeded gem dependency sometimes restricts ruby environment.
 | time_partitioning_type                        | enum          | no (either day)                              | no           | nil                        | Type of bigquery time partitioning feature.                                                            |
 | time_partitioning_field                       | string        | no                                           | no           | nil                        | Field used to determine how to create a time-based partition.                                          |
 | time_partitioning_expiration                  | time          | no                                           | no           | nil                        | Expiration milliseconds for bigquery time partitioning.                                                |
-| time_partitioning_require_partition_filter    | bool          | no                                           | no           | false                      | If true, queries over this table require a partition filter that can be used for partition elimination to be specified. (experimental feature on BigQuery) |
+
 
 #### bigquery_insert
 
@@ -434,7 +434,7 @@ Use placeholder.
 
 ```apache
 <match dummy>
-  @type bigquery_insert
+  @type bigquery_load
 
   ...
   table   accesslog$%Y%m%d
@@ -447,6 +447,8 @@ Use placeholder.
 ```
 
 But, Dynamic table creating doesn't support date partitioned table yet.
+And streaming insert is not allowed to insert with `$%Y%m%d` suffix.
+If you use date partitioned table with streaming insert, Please omit `$%Y%m%d` suffix from `table`.
 
 ### Dynamic table creating
 

@@ -416,7 +416,6 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
       time_partitioning_type day
       time_partitioning_field time
       time_partitioning_expiration 1h
-      time_partitioning_require_partition_filter true
     CONFIG
 
     stub_writer do |writer|
@@ -441,7 +440,6 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
           type: 'DAY',
           field: 'time',
           expiration_ms: 3600000,
-          require_partition_filter: true
         },
       }, {})
     end
