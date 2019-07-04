@@ -86,6 +86,16 @@ module Fluent
       end
     end
 
+    class NumericFieldSchema < FieldSchema
+      def type
+        :numeric
+      end
+
+      def format_one(value)
+        value.to_s
+      end
+    end
+
     class BooleanFieldSchema < FieldSchema
       def type
         :boolean
@@ -169,6 +179,7 @@ module Fluent
         string: StringFieldSchema,
         integer: IntegerFieldSchema,
         float: FloatFieldSchema,
+        numeric: NumericFieldSchema,
         boolean: BooleanFieldSchema,
         timestamp: TimestampFieldSchema,
         date: DateFieldSchema,
