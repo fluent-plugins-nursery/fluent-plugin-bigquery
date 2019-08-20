@@ -61,7 +61,7 @@ Because embbeded gem dependency sometimes restricts ruby environment.
 | time_partitioning_type                        | enum          | no (either day)                              | no           | nil                        | Type of bigquery time partitioning feature.                                                            |
 | time_partitioning_field                       | string        | no                                           | no           | nil                        | Field used to determine how to create a time-based partition.                                          |
 | time_partitioning_expiration                  | time          | no                                           | no           | nil                        | Expiration milliseconds for bigquery time partitioning.                                                |
-
+| clustering_fields                             | array(string) | no                                           | no           | nil                        | One or more fields on which data should be clustered. The order of the specified columns determines the sort order of the data. |
 
 #### bigquery_insert
 
@@ -469,6 +469,8 @@ NOTE: `auto_create_table` option cannot be used with `fetch_schema`. You should 
   ...
 </match>
 ```
+
+Also, you can create clustered table by using `clustering_fields`.
 
 ### Table schema
 

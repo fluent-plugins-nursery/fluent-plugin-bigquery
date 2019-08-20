@@ -450,4 +450,95 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
       end
     end
   end
+
+  def test_auto_create_clustered_table_by_bigquery_api
+    now = Time.now
+    message = {
+      json: {
+        time: now.to_i,
+        request: {
+          vhost: "bar",
+          path: "/path/to/baz",
+          method: "GET",
+          protocol: "HTTP/1.0",
+          agent: "libwww",
+          referer: "http://referer.example",
+          time: (now - 1).to_f,
+          bot_access: true,
+          loginsession: false,
+        },
+        remote: {
+          host: "remote.example",
+          ip: "192.168.1.1",
+          user: "nagachika",
+        },
+        response: {
+          status: 200,
+          bytes: 72,
+        },
+      }
+    }
+
+    driver = create_driver(<<-CONFIG)
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      time_format %s
+      time_field  time
+
+      auto_create_table true
+      schema_path #{File.join(File.dirname(__FILE__), "testdata", "apache.schema")}
+
+      time_partitioning_type day
+      time_partitioning_field time
+      time_partitioning_expiration 1h
+      time_partitioning_require_partition_filter true
+
+      clustering_fields [
+        "time",
+        "vhost"
+      ]
+    CONFIG
+
+    stub_writer do |writer|
+      body = {
+        rows: [message],
+        skip_invalid_rows: false,
+        ignore_unknown_values: false,
+      }
+      mock(writer.client).insert_all_table_data('yourproject_id', 'yourdataset_id', 'foo', body, {}) do
+        raise Google::Apis::ClientError.new("notFound: Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404)
+      end.at_least(1)
+      mock(writer).sleep(instance_of(Numeric)) { nil }.at_least(1)
+
+      mock(writer.client).insert_table('yourproject_id', 'yourdataset_id', {
+        table_reference: {
+          table_id: 'foo',
+        },
+        schema: {
+          fields: driver.instance.instance_variable_get(:@table_schema).to_a,
+        },
+        time_partitioning: {
+          type: 'DAY',
+          field: 'time',
+          expiration_ms: 3600000,
+        },
+        clustering: {
+          fields: [
+            'time',
+            'vhost',
+          ],
+        },
+      }, {})
+    end
+
+    assert_raise(RuntimeError) do
+      driver.run do
+        driver.feed("tag", Fluent::EventTime.now, message[:json])
+      end
+    end
+  end
 end
