@@ -132,7 +132,7 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
 
     driver.instance_start
     tag, time, record = "tag", Time.now.to_i, {"a" => "b"}
-    metadata = driver.instance.metadata_for_test(tag, time, record)
+    metadata = Fluent::Plugin::Buffer::Metadata.new(tag, time, record)
     chunk = driver.instance.buffer.generate_chunk(metadata).tap do |c|
       c.append([driver.instance.format(tag, time, record)])
     end
@@ -215,7 +215,7 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
 
     driver.instance_start
     tag, time, record = "tag", Time.now.to_i, {"a" => "b"}
-    metadata = driver.instance.metadata_for_test(tag, time, record)
+    metadata = Fluent::Plugin::Buffer::Metadata.new(tag, time, record)
     chunk = driver.instance.buffer.generate_chunk(metadata).tap do |c|
       c.append([driver.instance.format(tag, time, record)])
     end
