@@ -6,6 +6,8 @@ We will transfer fluent-plugin-bigquery repository to [fluent-plugins-nursery](h
 It does not change maintenance plan.
 The main purpose is that it solves mismatch between maintainers and current organization. 
 
+---
+
 [Fluentd](http://fluentd.org) output plugin to load/insert data into Google BigQuery.
 
 - **Plugin type**: Output
