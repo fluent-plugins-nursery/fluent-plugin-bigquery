@@ -199,6 +199,8 @@ class BigQueryBaseOutputTest < Test::Unit::TestCase
   end
 
   def test_configure_auth_application_default
+    omit "This testcase depends on some environment variables." if ENV["CI"] == "true"
+
     driver = create_driver(%[
       table foo
       auth_method application_default
