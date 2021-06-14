@@ -154,6 +154,11 @@ module Fluent
       end
 
       def format(tag, time, record)
+        if record.nil?
+          log.warn("nil record detected. corrupted chunks? tag=#{tag}, time=#{time}")
+          return
+        end
+
         record = inject_values_to_record(tag, time, record)
 
         meta = metadata(tag, time, record)
