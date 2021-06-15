@@ -96,6 +96,8 @@ module Fluent
         schema = get_schema(project, dataset, metadata)
 
         insert(project, dataset, table_id, rows, schema, template_suffix)
+      rescue MultiJson::ParseError => e
+        raise Fluent::UnrecoverableError.new(e)
       end
 
       def insert(project, dataset, table_id, rows, schema, template_suffix)
