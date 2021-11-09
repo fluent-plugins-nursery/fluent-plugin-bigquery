@@ -29,6 +29,9 @@ module Fluent
       # If insert_id_field is not specified, true means to allow duplicate rows
       config_param :allow_retry_insert_errors, :bool, default: false
 
+      ## RequirePartitionFilter
+      config_param :require_partition_filter, :bool, default: false
+
       ## Buffer
       config_section :buffer do
         config_set_default :@type, "memory"
