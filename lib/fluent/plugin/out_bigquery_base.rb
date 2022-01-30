@@ -111,9 +111,6 @@ module Fluent
         if @schema
           @table_schema.load_schema(@schema)
         end
-        if @schema_path
-          @table_schema.load_schema(MultiJson.load(File.read(@schema_path)))
-        end
 
         formatter_config = conf.elements("format")[0]
         @formatter = formatter_create(usage: 'out_bigquery_for_insert', default_type: 'json', conf: formatter_config)
@@ -126,6 +123,7 @@ module Fluent
         @tables_mutex = Mutex.new
         @fetched_schemas = {}
         @last_fetch_schema_time = Hash.new(0)
+        @read_schemas = {}
       end
 
       def multi_workers_ready?
@@ -161,6 +159,8 @@ module Fluent
         schema =
           if @fetch_schema
             fetch_schema(meta)
+          elsif @schema_path
+            read_schema(meta)
           else
             @table_schema
           end
@@ -209,9 +209,26 @@ module Fluent
         extract_placeholders(@fetch_schema_table || @tablelist[0], metadata)
       end
 
+      def read_schema(metadata)
+        schema_path = read_schema_target_path(metadata)
+
+        unless @read_schemas[schema_path]
+          table_schema = Fluent::BigQuery::RecordSchema.new("record")
+          table_schema.load_schema(MultiJson.load(File.read(schema_path)))
+          @read_schemas[schema_path] = table_schema
+        end
+        @read_schemas[schema_path]
+      end
+
+      def read_schema_target_path(metadata)
+        extract_placeholders(@schema_path, metadata)
+      end
+
       def get_schema(project, dataset, metadata)
         if @fetch_schema
           @fetched_schemas["#{project}.#{dataset}.#{fetch_schema_target_table(metadata)}"] || fetch_schema(metadata)
+        elsif @schema_path
+          @read_schemas[read_schema_target_path(metadata)] || read_schema(metadata)
         else
           @table_schema
         end
