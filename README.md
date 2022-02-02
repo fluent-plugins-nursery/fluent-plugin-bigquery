@@ -80,6 +80,7 @@ Because embbeded gem dependency sometimes restricts ruby environment.
 | insert_id_field                        | string        | no           | no           | nil                        | Use key as `insert_id` of Streaming Insert API parameter. see. https://docs.fluentd.org/v1.0/articles/api-plugin-helper-record_accessor                                                    |
 | add_insert_timestamp                   | string        | no           | no           | nil                        | Adds a timestamp column just before sending the rows to BigQuery, so that buffering time is not taken into account. Gives a field in BigQuery which represents the insert time of the row. |
 | allow_retry_insert_errors              | bool          | no           | no           | false                      | Retry to insert rows when an insertErrors occurs. There is a possibility that rows are inserted in duplicate.                                                                              |
+| require_partition_filter    | bool          | no                                           | no           | false                      | If true, queries over this table require a partition filter that can be used for partition elimination to be specified. |
 
 #### bigquery_load
 

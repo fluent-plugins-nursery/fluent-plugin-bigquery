@@ -148,6 +148,7 @@ module Fluent
           time_partitioning_type: @time_partitioning_type,
           time_partitioning_field: @time_partitioning_field,
           time_partitioning_expiration: @time_partitioning_expiration,
+          require_partition_filter: @require_partition_filter,
           clustering_fields: @clustering_fields,
           timeout_sec: @request_timeout_sec,
           open_timeout_sec: @request_open_timeout_sec,

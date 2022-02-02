@@ -35,6 +35,7 @@ module Fluent
           }
 
           definition.merge!(time_partitioning: time_partitioning) if time_partitioning
+          definition.merge!(require_partition_filter: require_partition_filter) if require_partition_filter
           definition.merge!(clustering: clustering) if clustering
           client.insert_table(project, dataset, definition, {})
           log.debug "create table", project_id: project, dataset: dataset, table: table_id
@@ -315,6 +316,16 @@ module Fluent
           }.reject { |_, v| v.nil? }
         else
           @time_partitioning
+        end
+      end
+
+      def require_partition_filter
+        return @require_partition_filter if instance_variable_defined?(:@require_partition_filter)
+
+        if @options[:require_partition_filter]
+          @require_partition_filter = @options[:require_partition_filter]
+        else
+          @require_partition_filter
         end
       end
 
