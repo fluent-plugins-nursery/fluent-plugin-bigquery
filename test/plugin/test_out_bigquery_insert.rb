@@ -5,6 +5,8 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
     Fluent::Test.setup
   end
 
+  SCHEMA_PATH = File.join(File.dirname(__FILE__), "testdata", "apache.schema")
+
   CONFIG = %[
     table foo
     email foo@bar.example
@@ -344,6 +346,8 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
       schema_path #{File.join(File.dirname(__FILE__), "testdata", "apache.schema")}
     CONFIG
 
+    schema_fields = Fluent::BigQuery::Helper.deep_symbolize_keys(MultiJson.load(File.read(SCHEMA_PATH)))
+
     stub_writer do |writer|
       body = {
         rows: [{json: Fluent::BigQuery::Helper.deep_symbolize_keys(message)}],
@@ -360,7 +364,7 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
           table_id: 'foo',
         },
         schema: {
-          fields: driver.instance.instance_variable_get(:@table_schema).to_a,
+          fields: schema_fields,
         },
       }, {})
     end
@@ -420,6 +424,8 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
       require_partition_filter true
     CONFIG
 
+    schema_fields = Fluent::BigQuery::Helper.deep_symbolize_keys(MultiJson.load(File.read(SCHEMA_PATH)))
+
     stub_writer do |writer|
       body = {
         rows: [message],
@@ -436,7 +442,7 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
           table_id: 'foo',
         },
         schema: {
-          fields: driver.instance.instance_variable_get(:@table_schema).to_a,
+          fields: schema_fields,
         },
         time_partitioning: {
           type: 'DAY',
@@ -505,6 +511,8 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
       ]
     CONFIG
 
+    schema_fields = Fluent::BigQuery::Helper.deep_symbolize_keys(MultiJson.load(File.read(SCHEMA_PATH)))
+
     stub_writer do |writer|
       body = {
         rows: [message],
@@ -521,7 +529,7 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
           table_id: 'foo',
         },
         schema: {
-          fields: driver.instance.instance_variable_get(:@table_schema).to_a,
+          fields: schema_fields,
         },
         time_partitioning: {
           type: 'DAY',

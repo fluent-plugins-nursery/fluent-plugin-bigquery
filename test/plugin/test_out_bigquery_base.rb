@@ -551,4 +551,24 @@ class BigQueryBaseOutputTest < Test::Unit::TestCase
     assert_equal :string, table_schema["argv"].type
     assert_equal :repeated, table_schema["argv"].mode
   end
+
+  def test_resolve_schema_path_with_placeholder
+    now = Time.now.to_i
+    driver = create_driver(<<-CONFIG)
+      table ${tag}_%Y%m%d
+      auth_method json_key
+      json_key jsonkey.josn
+      project yourproject_id
+      dataset yourdataset_id
+      schema_path ${tag}.schema
+
+      <buffer tag, time>
+        timekey 1d
+      </buffer>
+    CONFIG
+
+    metadata = Fluent::Plugin::Buffer::Metadata.new(now, "foo", {})
+
+    assert_equal "foo.schema", driver.instance.read_schema_target_path(metadata)
+  end
 end
