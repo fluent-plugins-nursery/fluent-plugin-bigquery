@@ -1,7 +1,7 @@
 module Fluent
   module BigQuery
     class Writer
-      def initialize(log, auth_method, options = {})
+      def initialize(log, auth_method, **options)
         @auth_method = auth_method
         @scope = "https://www.googleapis.com/auth/bigquery"
         @options = options
@@ -158,10 +158,8 @@ module Fluent
         res = client.insert_job(
           project,
           configuration,
-          {
-            upload_source: upload_source,
-            content_type: "application/octet-stream",
-          }
+          upload_source: upload_source,
+          content_type: "application/octet-stream",
         )
         JobReference.new(chunk_id, chunk_id_hex, project, dataset, table_id, res.job_reference.job_id)
       rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e

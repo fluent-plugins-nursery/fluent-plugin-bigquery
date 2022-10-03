@@ -131,7 +131,7 @@ module Fluent
       end
 
       def writer
-        @writer ||= Fluent::BigQuery::Writer.new(@log, @auth_method, {
+        @writer ||= Fluent::BigQuery::Writer.new(@log, @auth_method,
           private_key_path: @private_key_path, private_key_passphrase: @private_key_passphrase,
           email: @email,
           json_key: @json_key,
@@ -150,7 +150,7 @@ module Fluent
           clustering_fields: @clustering_fields,
           timeout_sec: @request_timeout_sec,
           open_timeout_sec: @request_open_timeout_sec,
-        })
+        )
       end
 
       def format(tag, time, record)
