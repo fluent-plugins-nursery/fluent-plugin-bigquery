@@ -9,6 +9,13 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
     RUBY_VERSION.to_i < 3
   end
 
+  def build_args(args)
+    if is_ruby2?
+      args << {}
+    end
+    args
+  end
+
   SCHEMA_PATH = File.join(File.dirname(__FILE__), "testdata", "apache.schema")
 
   CONFIG = %[
@@ -127,14 +134,11 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
     driver = create_driver
 
     stub_writer do |writer|
-      args = ['yourproject_id', 'yourdataset_id', 'foo', {
+      args = build_args(['yourproject_id', 'yourdataset_id', 'foo', {
         rows: [{json: hash_including(entry)}],
         skip_invalid_rows: false,
         ignore_unknown_values: false
-      }]
-      if is_ruby2?
-        args << {}
-      end
+      }])
       mock(writer.client).insert_all_table_data(*args) do
         s = stub!
         s.insert_errors { nil }
@@ -196,14 +200,11 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
 
       entry = {a: "b"}
       stub_writer do |writer|
-        args = ['yourproject_id', 'yourdataset_id', 'foo', {
+        args = build_args(['yourproject_id', 'yourdataset_id', 'foo', {
           rows: [{json: hash_including(entry)}],
           skip_invalid_rows: false,
           ignore_unknown_values: false
-        }]
-        if is_ruby2?
-          args << {}
-        end
+        }])
         mock(writer.client).insert_all_table_data(*args) do
           ex = Google::Apis::ServerError.new("error", status_code: d["status_code"])
           raise ex
@@ -259,14 +260,11 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
 
     entry = {a: "b"}
     stub_writer do |writer|
-      args = ['yourproject_id', 'yourdataset_id', 'foo', {
+      args = build_args(['yourproject_id', 'yourdataset_id', 'foo', {
         rows: [{json: hash_including(entry)}],
         skip_invalid_rows: false,
         ignore_unknown_values: false
-      }]
-      if is_ruby2?
-        args << {}
-      end
+      }])
       mock(writer.client).insert_all_table_data(*args) do
         ex = Google::Apis::ServerError.new("error", status_code: 501)
         def ex.reason
@@ -374,26 +372,20 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
         skip_invalid_rows: false,
         ignore_unknown_values: false,
       }
-      args = ['yourproject_id', 'yourdataset_id', 'foo', body]
-      if is_ruby2?
-        args << {}
-      end
+      args = build_args(['yourproject_id', 'yourdataset_id', 'foo', body])
       mock(writer.client).insert_all_table_data(*args) do
         raise Google::Apis::ClientError.new("notFound: Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404)
       end.at_least(1)
       mock(writer).sleep(instance_of(Numeric)) { nil }.at_least(1)
 
-      args = ['yourproject_id', 'yourdataset_id', {
+      args = build_args(['yourproject_id', 'yourdataset_id', {
         table_reference: {
           table_id: 'foo',
         },
         schema: {
           fields: schema_fields,
         },
-      }]
-      if is_ruby2?
-        args << {}
-      end
+      }])
       mock(writer.client).insert_table(*args)
     end
 
@@ -460,16 +452,13 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
         skip_invalid_rows: false,
         ignore_unknown_values: false,
       }
-      args = ['yourproject_id', 'yourdataset_id', 'foo', body]
-      if is_ruby2?
-        args << {}
-      end
+      args = build_args(['yourproject_id', 'yourdataset_id', 'foo', body])
       mock(writer.client).insert_all_table_data(*args) do
         raise Google::Apis::ClientError.new("notFound: Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404)
       end.at_least(1)
       mock(writer).sleep(instance_of(Numeric)) { nil }.at_least(1)
 
-      args = ['yourproject_id', 'yourdataset_id', {
+      args = build_args(['yourproject_id', 'yourdataset_id', {
         table_reference: {
           table_id: 'foo',
         },
@@ -482,10 +471,7 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
           expiration_ms: 3600000,
         },
         require_partition_filter: true,
-      }]
-      if is_ruby2?
-        args << {}
-      end
+      }])
       mock(writer.client).insert_table(*args)
     end
 
@@ -555,16 +541,13 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
         skip_invalid_rows: false,
         ignore_unknown_values: false,
       }
-      args = ['yourproject_id', 'yourdataset_id', 'foo', body]
-      if is_ruby2?
-        args << {}
-      end
+      args = build_args(['yourproject_id', 'yourdataset_id', 'foo', body])
       mock(writer.client).insert_all_table_data(*args) do
         raise Google::Apis::ClientError.new("notFound: Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404)
       end.at_least(1)
       mock(writer).sleep(instance_of(Numeric)) { nil }.at_least(1)
 
-      args = ['yourproject_id', 'yourdataset_id', {
+      args = build_args(['yourproject_id', 'yourdataset_id', {
         table_reference: {
           table_id: 'foo',
         },
@@ -582,10 +565,7 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
             'vhost',
           ],
         },
-      }]
-      if is_ruby2?
-        args << {}
-      end
+      }])
       mock(writer.client).insert_table(*args)
     end
 
