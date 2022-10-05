@@ -31,6 +31,7 @@ OAuth flow for installed applications.
 | v0.4.x         | 0.12.x          | 2.0 or later |
 | v1.x.x         | 0.14.x or later | 2.2 or later |
 | v2.x.x         | 0.14.x or later | 2.3 or later |
+| v3.x.x         | 1.x or later    | 2.7 or later |
 
 ## With docker image
 If you use official alpine based fluentd docker image (https://github.com/fluent/fluentd-docker-image),
