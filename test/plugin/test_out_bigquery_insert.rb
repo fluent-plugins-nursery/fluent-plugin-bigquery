@@ -283,7 +283,7 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
     assert_raise Fluent::BigQuery::UnRetryableError do
       driver.instance.write(chunk)
     end
-    assert_in_delta driver.instance.retry.secondary_transition_at , Time.now, 0.1
+    assert_in_delta driver.instance.retry.secondary_transition_at , Time.now, 0.2
     driver.instance_shutdown
   end
 
