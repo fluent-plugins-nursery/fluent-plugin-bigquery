@@ -1,0 +1,22 @@
+[
+  {
+    "name": "id",
+    "type": "INTEGER",
+    "mode": "REQUIRED"
+  },
+  {
+    "name": "string_field",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "timestamp_field",
+    "type": "TIMESTAMP",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "date",
+    "type": "DATE",
+    "mode": "REQUIRED"
+  }
+]

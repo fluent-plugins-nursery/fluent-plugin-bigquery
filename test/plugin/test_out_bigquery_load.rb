@@ -64,7 +64,7 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
             max_bad_records: 0,
           }
         }
-      }, {upload_source: duck_type(:write, :sync, :rewind), content_type: "application/octet-stream"}) do
+      }, upload_source: duck_type(:write, :sync, :rewind), content_type: "application/octet-stream") do
         stub!.job_reference.stub!.job_id { "dummy_job_id" }
       end
     end
@@ -117,7 +117,7 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
           },
         },
         job_reference: {project_id: 'yourproject_id', job_id: satisfy { |x| x =~ /fluentd_job_.*/}} ,
-      }, {upload_source: duck_type(:write, :sync, :rewind), content_type: "application/octet-stream"}) do
+      }, upload_source: duck_type(:write, :sync, :rewind), content_type: "application/octet-stream") do
         stub!.job_reference.stub!.job_id { "dummy_job_id" }
       end
     end
@@ -154,7 +154,7 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
             max_bad_records: 0,
           }
         }
-      }, {upload_source: duck_type(:write, :sync, :rewind), content_type: "application/octet-stream"}) do
+      }, upload_source: duck_type(:write, :sync, :rewind), content_type: "application/octet-stream") do
         stub!.job_reference.stub!.job_id { "dummy_job_id" }
       end
 
@@ -237,7 +237,7 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
             max_bad_records: 0,
           }
         }
-      }, {upload_source: duck_type(:write, :sync, :rewind), content_type: "application/octet-stream"}) do
+      }, upload_source: duck_type(:write, :sync, :rewind), content_type: "application/octet-stream") do
         stub!.job_reference.stub!.job_id { "dummy_job_id" }
       end
 
@@ -317,7 +317,7 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
             },
           }
         }
-      }, {upload_source: duck_type(:write, :sync, :rewind), content_type: "application/octet-stream"}) do
+      }, upload_source: duck_type(:write, :sync, :rewind), content_type: "application/octet-stream") do
         stub!.job_reference.stub!.job_id { "dummy_job_id" }
       end
     end
