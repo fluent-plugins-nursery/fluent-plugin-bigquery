@@ -381,10 +381,10 @@ format to construct table ids.
 Table ids are formatted at runtime
 using the chunk key time.
 
-see. http://docs.fluentd.org/v0.14/articles/output-plugin-overview
+see. https://docs.fluentd.org/configuration/buffer-section
 
 For example, with the configuration below,
-data is inserted into tables `accesslog_2014_08`, `accesslog_2014_09` and so on.
+data is inserted into tables `accesslog_2014_08_02`, `accesslog_2014_08_03` and so on.
 
 ```apache
 <match dummy>
@@ -394,7 +394,7 @@ data is inserted into tables `accesslog_2014_08`, `accesslog_2014_09` and so on.
 
   project yourproject_id
   dataset yourdataset_id
-  table   accesslog_%Y_%m
+  table   accesslog_%Y_%m_%d
 
   <buffer time>
     timekey 1d
@@ -402,6 +402,8 @@ data is inserted into tables `accesslog_2014_08`, `accesslog_2014_09` and so on.
   ...
 </match>
 ```
+
+**NOTE: In current fluentd (v1.15.x), The maximum unit supported by strftime formatting is the granularity of days**
 
 #### record attribute formatting
 The format can be suffixed with attribute name.
