@@ -347,7 +347,7 @@ module Fluent
           if try_count == 1
             # Table Not Found: Auto Create Table
             create_table(project, dataset, table_id, schema)
-          elsif try_count > 10
+          elsif try_count > 60 # timeout in about 300 seconds
             raise "A new table was created but it is not found."
           end
 
