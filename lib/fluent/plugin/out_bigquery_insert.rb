@@ -46,6 +46,7 @@ module Fluent
 
       def configure(conf)
         super
+        @is_load = false
 
         if @insert_id_field
           if @insert_id_field !~ /^\$[\[\.]/ && @insert_id_field =~ /\./
