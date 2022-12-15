@@ -15,6 +15,11 @@
     "mode": "NULLABLE"
   },
   {
+    "name": "geography_field",
+    "type": "GEOGRAPHY",
+    "mode": "NULLABLE"
+  },
+  {
     "name": "timestamp_field",
     "type": "TIMESTAMP",
     "mode": "NULLABLE"
@@ -32,6 +37,11 @@
       {
         "name": "inner_field",
         "type": "STRING",
+        "mode": "REQUIRED"
+      },
+      {
+        "name": "inner_json",
+        "type": "JSON",
         "mode": "REQUIRED"
       }
     ]

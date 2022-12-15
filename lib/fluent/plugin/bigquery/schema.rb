@@ -80,6 +80,12 @@ module Fluent
       end
     end
 
+    class GeographyFieldSchema < StringFieldSchema
+      def type
+        :geography
+      end
+    end
+
     class IntegerFieldSchema < FieldSchema
       def type
         :integer
@@ -200,6 +206,7 @@ module Fluent
         datetime: DateTimeFieldSchema,
         time: TimeFieldSchema,
         json: JsonFieldSchema,
+        geography: GeographyFieldSchema,
         record: RecordSchema
       }.freeze
 
