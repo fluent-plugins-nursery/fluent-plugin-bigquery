@@ -36,6 +36,7 @@ module Fluent
 
       def configure(conf)
         super
+        @is_load = true
 
         placeholder_params = "project=#{@project}/dataset=#{@dataset}/table=#{@tablelist.join(",")}/fetch_schema_table=#{@fetch_schema_table}"
         placeholder_validate!(:bigquery_load, placeholder_params)

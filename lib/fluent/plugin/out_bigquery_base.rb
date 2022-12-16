@@ -172,7 +172,7 @@ module Fluent
           end
 
         begin
-          row = schema.format(record)
+          row = schema.format(record, is_load: !!@is_load)
           return if row.empty?
           @formatter.format(tag, time, row)
         rescue

@@ -10,6 +10,16 @@
     "mode": "NULLABLE"
   },
   {
+    "name": "json_field",
+    "type": "JSON",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "geography_field",
+    "type": "GEOGRAPHY",
+    "mode": "NULLABLE"
+  },
+  {
     "name": "timestamp_field",
     "type": "TIMESTAMP",
     "mode": "NULLABLE"
@@ -18,5 +28,27 @@
     "name": "date",
     "type": "DATE",
     "mode": "REQUIRED"
+  },
+  {
+    "name": "record_field",
+    "type": "RECORD",
+    "mode": "NULLABLE",
+    "fields": [
+      {
+        "name": "inner_field",
+        "type": "STRING",
+        "mode": "REQUIRED"
+      },
+      {
+        "name": "inner_json",
+        "type": "JSON",
+        "mode": "REQUIRED"
+      }
+    ]
+  },
+  {
+    "name": "repeated_string_field",
+    "type": "STRING",
+    "mode": "REPEATED"
   }
 ]
