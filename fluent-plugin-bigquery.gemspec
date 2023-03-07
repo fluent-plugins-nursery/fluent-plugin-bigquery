@@ -19,12 +19,15 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   spec.add_development_dependency "rake"
+  spec.add_development_dependency "debug"
   spec.add_development_dependency "rr"
   spec.add_development_dependency "test-unit"
   spec.add_development_dependency "test-unit-rr"
 
   spec.add_runtime_dependency "google-api-client", ">= 0.11.0"
   spec.add_runtime_dependency "googleauth", ">= 0.5.0"
+  spec.add_runtime_dependency "google-cloud-bigquery"
+  spec.add_runtime_dependency "google-cloud-bigquery-storage"
   spec.add_runtime_dependency "multi_json"
   spec.add_runtime_dependency "fluentd", ">= 0.14.0", "< 2"
 end
