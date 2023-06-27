@@ -32,6 +32,11 @@ class RecordSchemaTest < Test::Unit::TestCase
         "name" => "utilisation",
         "type" => "NUMERIC",
         "mode" => "NULLABLE"
+      },
+      {
+        "name" => "bigutilisation",
+        "type" => "BIGNUMERIC",
+        "mode" => "NULLABLE"
       }
     ]
   end
@@ -72,6 +77,11 @@ class RecordSchemaTest < Test::Unit::TestCase
         "name" => "new_column",
         "type" => "STRING",
         "mode" => "REQUIRED"
+      },
+      {
+        "name" => "bigutilisation",
+        "type" => "BIGNUMERIC",
+        "mode" => "NULLABLE"
       }
     ]
   end
@@ -106,6 +116,11 @@ class RecordSchemaTest < Test::Unit::TestCase
       {
         "name" => "utilisation",
         "type" => "NUMERIC",
+        "mode" => "NULLABLE"
+      },
+      {
+        "name" => "bigutilisation",
+        "type" => "BIGNUMERIC",
         "mode" => "NULLABLE"
       }
     ]
@@ -157,12 +172,12 @@ class RecordSchemaTest < Test::Unit::TestCase
     time = Time.local(2016, 2, 7, 19, 0, 0).utc
 
     formatted = fields.format_one({
-      "time" => time, "tty" => ["tty1", "tty2", "tty3"], "pwd" => "/home", "user" => {name: "joker1007", uid: 10000}, "argv" => ["foo", 42], "utilisation" => "0.837"
+      "time" => time, "tty" => ["tty1", "tty2", "tty3"], "pwd" => "/home", "user" => {name: "joker1007", uid: 10000}, "argv" => ["foo", 42], "utilisation" => "0.837", "bigutilisation" => "0.837"
     })
     assert_equal(
       formatted,
       {
-        "time" => time.strftime("%Y-%m-%d %H:%M:%S.%6L %:z"), "tty" => MultiJson.dump(["tty1", "tty2", "tty3"]), "pwd" => "/home", "user" => MultiJson.dump({name: "joker1007", uid: 10000}), "argv" => ["foo", "42"], "utilisation" => "0.837"
+        "time" => time.strftime("%Y-%m-%d %H:%M:%S.%6L %:z"), "tty" => MultiJson.dump(["tty1", "tty2", "tty3"]), "pwd" => "/home", "user" => MultiJson.dump({name: "joker1007", uid: 10000}), "argv" => ["foo", "42"], "utilisation" => "0.837", "bigutilisation" => "0.837"
       }
     )
   end
