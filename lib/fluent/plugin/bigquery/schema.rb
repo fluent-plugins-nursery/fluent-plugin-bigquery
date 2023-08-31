@@ -72,7 +72,7 @@ module Fluent
       end
 
       def format_one(value, is_load: false)
-        if is_load
+        if is_load || value.is_a?(String)
           value
         else
           MultiJson.dump(value)
