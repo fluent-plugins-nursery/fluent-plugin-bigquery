@@ -116,6 +116,16 @@ module Fluent
       end
     end
 
+    class BigNumericFieldSchema < FieldSchema
+      def type
+        :bignumeric
+      end
+
+      def format_one(value, is_load: false)
+        value.to_s
+      end
+    end    
+
     class BooleanFieldSchema < FieldSchema
       def type
         :boolean
@@ -200,6 +210,7 @@ module Fluent
         integer: IntegerFieldSchema,
         float: FloatFieldSchema,
         numeric: NumericFieldSchema,
+        bignumeric: BigNumericFieldSchema,
         boolean: BooleanFieldSchema,
         timestamp: TimestampFieldSchema,
         date: DateFieldSchema,
