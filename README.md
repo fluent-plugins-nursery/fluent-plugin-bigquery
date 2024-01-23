@@ -30,7 +30,7 @@ If you use official alpine based fluentd docker image (https://github.com/fluent
 You need to install `bigdecimal` gem on your own dockerfile.
 Because alpine based image has only minimal ruby environment in order to reduce image size.
 And in most case, dependency to embedded gem is not written on gemspec.
-Because embbeded gem dependency sometimes restricts ruby environment.
+Because embedded gem dependency sometimes restricts ruby environment.
 
 ## Configuration
 
@@ -40,7 +40,7 @@ Because embbeded gem dependency sometimes restricts ruby environment.
 
 | name                                          | type          | required?                                    | placeholder? | default                    | description                                                                                            |
 | :-------------------------------------------- | :------------ | :-----------                                 | :----------  | :------------------------- | :-----------------------                                                                               |
-| auth_method                                   | enum          | yes                                          | no           | private_key                | `private_key` or `json_key` or `compute_engine` or `application_default`                               |
+| auth_method                                   | enum          | yes                                          | no           | private_key                | `private_key` or `json_key` or `compute_engine` or `application_default` (GKE Workload Identity)       |
 | email                                         | string        | yes (private_key)                            | no           | nil                        | GCP Service Account Email                                                                              |
 | private_key_path                              | string        | yes (private_key)                            | no           | nil                        | GCP Private Key file path                                                                              |
 | private_key_passphrase                        | string        | yes (private_key)                            | no           | nil                        | GCP Private Key Passphrase                                                                             |
@@ -255,7 +255,7 @@ Important options for high rate events are:
     * threads for insert api calls in parallel
     * specify this option for 100 or more records per seconds
     * 10 or more threads seems good for inserts over internet
-    * less threads may be good for Google Compute Engine instances (with low latency for BigQuery)
+    * fewer threads may be good for Google Compute Engine instances (with low latency for BigQuery)
   * `buffer/flush_interval`
     * interval between data flushes (default 0.25)
     * you can set subsecond values such as `0.15` on Fluentd v0.10.42 or later
@@ -294,7 +294,7 @@ There are four methods supported to fetch access token for the service account.
 1. Public-Private key pair of GCP(Google Cloud Platform)'s service account
 2. JSON key of GCP(Google Cloud Platform)'s service account
 3. Predefined access token (Compute Engine only)
-4. Google application default credentials (http://goo.gl/IUuyuX)
+4. [Google application default credentials](https://cloud.google.com/docs/authentication/application-default-credentials) / GKE Workload Identity
 
 #### Public-Private key pair of GCP's service account
 
@@ -339,7 +339,7 @@ You need to only include `private_key` and `client_email` key from JSON key file
 
 #### Predefined access token (Compute Engine only)
 
-When you run fluentd on Googlce Compute Engine instance,
+When you run fluentd on Google Compute Engine instance,
 you don't need to explicitly create a service account for fluentd.
 In this authentication method, you need to add the API scope "https://www.googleapis.com/auth/bigquery" to the scope list of your
 Compute Engine instance, then you can configure fluentd like this.
@@ -360,14 +360,16 @@ Compute Engine instance, then you can configure fluentd like this.
 
 #### Application default credentials
 
-The Application Default Credentials provide a simple way to get authorization credentials for use in calling Google APIs, which are described in detail at http://goo.gl/IUuyuX.
+The Application Default Credentials provide a simple way to get authorization credentials for use in calling Google APIs, which are described in detail at https://cloud.google.com/docs/authentication/application-default-credentials.
+
+**This is the method you should choose if you want to use Workload Identity on GKE**.
 
 In this authentication method, the credentials returned are determined by the environment the code is running in. Conditions are checked in the following order:credentials are get from following order.
 
 1. The environment variable `GOOGLE_APPLICATION_CREDENTIALS` is checked. If this variable is specified it should point to a JSON key file that defines the credentials.
-2. The environment variable `GOOGLE_PRIVATE_KEY` and `GOOGLE_CLIENT_EMAIL` are checked. If this variables are specified `GOOGLE_PRIVATE_KEY` should point to `private_key`, `GOOGLE_CLIENT_EMAIL` should point to `client_email` in a JSON key.
-3. Well known path is checked. If file is exists, the file used as a JSON key file. This path is `$HOME/.config/gcloud/application_default_credentials.json`.
-4. System default path is checked. If file is exists, the file used as a JSON key file. This path is `/etc/google/auth/application_default_credentials.json`.
+2. The environment variable `GOOGLE_PRIVATE_KEY` and `GOOGLE_CLIENT_EMAIL` are checked. If these variables are specified `GOOGLE_PRIVATE_KEY` should point to `private_key`, `GOOGLE_CLIENT_EMAIL` should point to `client_email` in a JSON key.
+3. Well known path is checked. If the file exists, it is used as a JSON key file. This path is `$HOME/.config/gcloud/application_default_credentials.json`.
+4. System default path is checked. If the file exists, it is used as a JSON key file. This path is `/etc/google/auth/application_default_credentials.json`.
 5. If you are running in Google Compute Engine production, the built-in service account associated with the virtual machine instance will be used.
 6. If none of these conditions is true, an error will occur.
 
@@ -547,7 +549,7 @@ The second method is to specify a path to a BigQuery schema file instead of list
   schema_path /path/to/httpd.schema
 </match>
 ```
-where /path/to/httpd.schema is a path to the JSON-encoded schema file which you used for creating the table on BigQuery. By using external schema file you are able to write full schema that does support NULLABLE/REQUIRED/REPEATED, this feature is really useful and adds full flexbility.
+where /path/to/httpd.schema is a path to the JSON-encoded schema file which you used for creating the table on BigQuery. By using external schema file you are able to write full schema that does support NULLABLE/REQUIRED/REPEATED, this feature is really useful and adds full flexibility.
 
 The third method is to set `fetch_schema` to `true` to enable fetch a schema using BigQuery API.  In this case, your fluent.conf looks like:
 
@@ -594,5 +596,5 @@ You can set `insert_id_field` option to specify the field to use as `insertId` p
 ## Authors
 
 * @tagomoris: First author, original version
-* KAIZEN platform Inc.: Maintener, Since 2014.08.19
+* KAIZEN platform Inc.: Maintainer, Since 2014.08.19
 * @joker1007
