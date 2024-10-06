@@ -74,14 +74,14 @@ class RecordSchemaTest < Test::Unit::TestCase
         "mode" => "NULLABLE"
       },
       {
-        "name" => "new_column",
-        "type" => "STRING",
-        "mode" => "REQUIRED"
-      },
-      {
         "name" => "bigutilisation",
         "type" => "BIGNUMERIC",
         "mode" => "NULLABLE"
+      },
+      {
+        "name" => "new_column",
+        "type" => "STRING",
+        "mode" => "REQUIRED"
       }
     ]
   end
