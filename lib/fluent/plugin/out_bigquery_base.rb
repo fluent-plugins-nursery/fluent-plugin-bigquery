@@ -69,7 +69,7 @@ module Fluent
       config_param :request_open_timeout_sec, :time, default: 60
 
       ## Partitioning
-      config_param :time_partitioning_type, :enum, list: [:day], default: nil
+      config_param :time_partitioning_type, :enum, list: [:day, :hour], default: nil
       config_param :time_partitioning_field, :string, default: nil
       config_param :time_partitioning_expiration, :time, default: nil
 

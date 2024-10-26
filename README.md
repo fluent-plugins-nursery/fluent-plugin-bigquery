@@ -59,7 +59,7 @@ Because embbeded gem dependency sometimes restricts ruby environment.
 | schema_cache_expire                           | integer       | no                                           | no           | 600                        | Value is second. If current time is after expiration interval, re-fetch table schema definition.       |
 | request_timeout_sec                           | integer       | no                                           | no           | nil                        | Bigquery API response timeout                                                                          |
 | request_open_timeout_sec                      | integer       | no                                           | no           | 60                         | Bigquery API connection, and request timeout. If you send big data to Bigquery, set large value.       |
-| time_partitioning_type                        | enum          | no (either day)                              | no           | nil                        | Type of bigquery time partitioning feature.                                                            |
+| time_partitioning_type                        | enum          | no (either day or hour)                      | no           | nil                        | Type of bigquery time partitioning feature.                                                            |
 | time_partitioning_field                       | string        | no                                           | no           | nil                        | Field used to determine how to create a time-based partition.                                          |
 | time_partitioning_expiration                  | time          | no                                           | no           | nil                        | Expiration milliseconds for bigquery time partitioning.                                                |
 | clustering_fields                             | array(string) | no                                           | no           | nil                        | One or more fields on which data should be clustered. The order of the specified columns determines the sort order of the data. |
@@ -194,15 +194,15 @@ For high rate inserts over streaming inserts, you should specify flush intervals
 ```apache
 <match dummy>
   @type bigquery_insert
-  
+
   <buffer>
     flush_interval 0.1  # flush as frequent as possible
-    
+
     total_limit_size 10g
-    
+
     flush_thread_count 16
   </buffer>
-  
+
   auth_method private_key   # default
   email xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxx@developer.gserviceaccount.com
   private_key_path /home/username/.keys/00000000000000000000000000000000-privatekey.p12
@@ -543,7 +543,7 @@ The second method is to specify a path to a BigQuery schema file instead of list
   @type bigquery_insert
 
   ...
-  
+
   schema_path /path/to/httpd.schema
 </match>
 ```
@@ -556,7 +556,7 @@ The third method is to set `fetch_schema` to `true` to enable fetch a schema usi
   @type bigquery_insert
 
   ...
-  
+
   fetch_schema true
   # fetch_schema_table other_table # if you want to fetch schema from other table
 </match>
