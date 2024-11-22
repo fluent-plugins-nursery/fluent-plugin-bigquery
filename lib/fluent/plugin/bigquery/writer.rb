@@ -101,6 +101,7 @@ module Fluent
           end
         end
       rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
+        log.debug "insert error: #{e.message}", status_code: e.respond_to?(:status_code) ? e.status_code : nil, reason: e.respond_to?(:reason) ? e.reason : nil
         error_data = { project_id: project, dataset: dataset, table: table_id, code: e.status_code, message: e.message }
         wrapped = Fluent::BigQuery::Error.wrap(e)
         if wrapped.retryable?
@@ -112,7 +113,7 @@ module Fluent
         raise wrapped
       end
 
-      JobReference = Struct.new(:chunk_id, :chunk_id_hex, :project_id, :dataset_id, :table_id, :job_id) do
+      JobReference = Struct.new(:chunk_id, :chunk_id_hex, :project_id, :dataset_id, :table_id, :job_id, :location) do
         def as_hash(*keys)
           if keys.empty?
             to_h
@@ -161,7 +162,7 @@ module Fluent
           upload_source: upload_source,
           content_type: "application/octet-stream",
         )
-        JobReference.new(chunk_id, chunk_id_hex, project, dataset, table_id, res.job_reference.job_id)
+        JobReference.new(chunk_id, chunk_id_hex, project, dataset, table_id, res.job_reference.job_id, res.job_reference.location)
       rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
         log.error "job.load API", project_id: project, dataset: dataset, table: table_id, code: e.status_code, message: e.message
 
@@ -175,7 +176,7 @@ module Fluent
       def fetch_load_job(job_reference)
         project = job_reference.project_id
         job_id = job_reference.job_id
-        location = @options[:location]
+        location = job_reference.location
 
         res = client.get_job(project, job_id, location: location)
         log.debug "load job fetched", id: job_id, state: res.status.state, **job_reference.as_hash(:project_id, :dataset_id, :table_id)

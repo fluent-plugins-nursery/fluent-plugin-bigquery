@@ -65,7 +65,10 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
           }
         }
       }, upload_source: duck_type(:write, :sync, :rewind), content_type: "application/octet-stream") do
-        stub!.job_reference.stub!.job_id { "dummy_job_id" }
+        stub!.job_reference.stub! do |s|
+          s.job_id { "dummy_job_id" }
+          s.location { "us" }
+        end
       end
     end
 
@@ -118,7 +121,10 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
         },
         job_reference: {project_id: 'yourproject_id', job_id: satisfy { |x| x =~ /fluentd_job_.*/}} ,
       }, upload_source: duck_type(:write, :sync, :rewind), content_type: "application/octet-stream") do
-        stub!.job_reference.stub!.job_id { "dummy_job_id" }
+        stub!.job_reference.stub! do |s|
+          s.job_id { "dummy_job_id" }
+          s.location { "us" }
+        end
       end
     end
 
@@ -155,10 +161,13 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
           }
         }
       }, upload_source: duck_type(:write, :sync, :rewind), content_type: "application/octet-stream") do
-        stub!.job_reference.stub!.job_id { "dummy_job_id" }
+        stub!.job_reference.stub! do |s|
+          s.job_id { "dummy_job_id" }
+          s.location { "us" }
+        end
       end
 
-      mock(writer.client).get_job('yourproject_id', 'dummy_job_id', :location=>nil) do
+      mock(writer.client).get_job('yourproject_id', 'dummy_job_id', location: "us") do
         stub! do |s|
           s.id { 'dummy_job_id' }
           s.configuration.stub! do |_s|
@@ -238,10 +247,13 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
           }
         }
       }, upload_source: duck_type(:write, :sync, :rewind), content_type: "application/octet-stream") do
-        stub!.job_reference.stub!.job_id { "dummy_job_id" }
+        stub!.job_reference.stub! do |s|
+          s.job_id { "dummy_job_id" }
+          s.location { "us" }
+        end
       end
 
-      mock(writer.client).get_job('yourproject_id', 'dummy_job_id', :location=>nil) do
+      mock(writer.client).get_job('yourproject_id', 'dummy_job_id', location: "us") do
         stub! do |s|
           s.id { 'dummy_job_id' }
           s.configuration.stub! do |_s|
@@ -318,7 +330,10 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
           }
         }
       }, upload_source: duck_type(:write, :sync, :rewind), content_type: "application/octet-stream") do
-        stub!.job_reference.stub!.job_id { "dummy_job_id" }
+        stub!.job_reference.stub! do |s|
+          s.job_id { "dummy_job_id" }
+          s.location { "us" }
+        end
       end
     end
 
