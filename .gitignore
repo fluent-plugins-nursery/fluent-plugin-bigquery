@@ -20,3 +20,5 @@ script/
 .idea/
 
 fluentd-0.12
+
+integration/log

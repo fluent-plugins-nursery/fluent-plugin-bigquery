@@ -5,6 +5,7 @@ module Fluent
       RETRYABLE_ERROR_REASON = %w(backendError internalError rateLimitExceeded tableUnavailable).freeze
       RETRYABLE_INSERT_ERRORS_REASON = %w(timeout backendError internalError rateLimitExceeded).freeze
       RETRYABLE_STATUS_CODE = [500, 502, 503, 504]
+      REGION_NOT_WRITABLE_MESSAGE = -"is not writable in the region"
 
       class << self
         # @param e [Google::Apis::Error]
@@ -19,6 +20,10 @@ module Fluent
 
         # @param e [Google::Apis::Error]
         def retryable_error?(e)
+          retryable_server_error?(e) || retryable_region_not_writable?(e)
+        end
+
+        def retryable_server_error?(e)
           e.is_a?(Google::Apis::ServerError) && RETRYABLE_STATUS_CODE.include?(e.status_code)
         end
 
@@ -28,6 +33,10 @@ module Fluent
 
         def retryable_insert_errors_reason?(reason)
           RETRYABLE_INSERT_ERRORS_REASON.include?(reason)
+        end
+
+        def retryable_region_not_writable?(e)
+          e.is_a?(Google::Apis::ClientError) && e.status_code == 400 && e.message.include?(REGION_NOT_WRITABLE_MESSAGE)
         end
 
         # Guard for instantiation
