@@ -167,7 +167,7 @@ module Fluent
         log.error "job.load API", project_id: project, dataset: dataset, table: table_id, code: e.status_code, message: e.message
 
         if job_id && e.status_code == 409 && e.message =~ /Job/ # duplicate load job
-          return JobReference.new(chunk_id, chunk_id_hex, project, dataset, table_id, job_id)
+          return JobReference.new(chunk_id, chunk_id_hex, project, dataset, table_id, job_id, res.job_reference.location)
         end
 
         raise Fluent::BigQuery::Error.wrap(e)
