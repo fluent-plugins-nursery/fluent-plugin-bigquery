@@ -144,8 +144,8 @@ module Fluent
         configuration.merge!({job_reference: {project_id: project, job_id: job_id}}) if job_id
 
         begin
-          # Check table existance
-          client.get_table(project, dataset, table_id)
+          # Check table existance and use its location for the result when the load jobs is duplicated.
+          table = client.get_table(project, dataset, table_id)
         rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
           if e.status_code == 404 && /Not Found: Table/i =~ e.message
             raise Fluent::BigQuery::UnRetryableError.new("Table is not found") unless @options[:auto_create_table]
@@ -167,7 +167,9 @@ module Fluent
         log.error "job.load API", project_id: project, dataset: dataset, table: table_id, code: e.status_code, message: e.message
 
         if job_id && e.status_code == 409 && e.message =~ /Job/ # duplicate load job
-          return JobReference.new(chunk_id, chunk_id_hex, project, dataset, table_id, job_id, res.job_reference.location)
+          # If a load job is duplicated, the API response may not be available to create the result.
+          # Therefore, we need to use the location of the table instead of the job's location to determine the result.
+          return JobReference.new(chunk_id, chunk_id_hex, project, dataset, table_id, job_id, table.location)
         end
 
         raise Fluent::BigQuery::Error.wrap(e)
