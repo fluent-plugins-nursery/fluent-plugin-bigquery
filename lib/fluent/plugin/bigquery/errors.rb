@@ -6,6 +6,7 @@ module Fluent
       RETRYABLE_INSERT_ERRORS_REASON = %w(timeout backendError internalError rateLimitExceeded).freeze
       RETRYABLE_STATUS_CODE = [500, 502, 503, 504]
       REGION_NOT_WRITABLE_MESSAGE = -"is not writable in the region"
+      SSL_UNEXPECTED_EOF_MESSAGE = -"SSL_read: unexpected eof while reading"
 
       class << self
         # @param e [Google::Apis::Error]
@@ -20,7 +21,7 @@ module Fluent
 
         # @param e [Google::Apis::Error]
         def retryable_error?(e)
-          retryable_server_error?(e) || retryable_region_not_writable?(e)
+          retryable_server_error?(e) || retryable_region_not_writable?(e) || retryable_ssl_unexpected_eof?(e)
         end
 
         def retryable_server_error?(e)
@@ -37,6 +38,10 @@ module Fluent
 
         def retryable_region_not_writable?(e)
           e.is_a?(Google::Apis::ClientError) && e.status_code == 400 && e.message.include?(REGION_NOT_WRITABLE_MESSAGE)
+        end
+
+        def retryable_ssl_unexpected_eof?(e)
+          e.message.include?(SSL_UNEXPECTED_EOF_MESSAGE)
         end
 
         # Guard for instantiation
