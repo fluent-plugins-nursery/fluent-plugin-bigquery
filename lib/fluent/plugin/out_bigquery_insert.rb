@@ -48,6 +48,16 @@ module Fluent
         super
         @is_load = false
 
+        if @autodetect
+          raise Fluent::ConfigError,
+            "'autodetect' is only supported by 'bigquery_load'; 'bigquery_insert' uses BigQuery's streaming insert API (tabledata.insertAll), which does not support schema autodetection"
+        end
+
+        if @schema_update_options
+          raise Fluent::ConfigError,
+            "'schema_update_options' is only supported by 'bigquery_load'; 'bigquery_insert' uses BigQuery's streaming insert API (tabledata.insertAll), which does not support schema updates"
+        end
+
         if @insert_id_field
           if @insert_id_field !~ /^\$[\[\.]/ && @insert_id_field =~ /\./
             warn "[BREAKING CHANGE] insert_id_field format is changed. Use fluentd record_accessor helper. (https://docs.fluentd.org/v1.0/articles/api-plugin-helper-record_accessor)"

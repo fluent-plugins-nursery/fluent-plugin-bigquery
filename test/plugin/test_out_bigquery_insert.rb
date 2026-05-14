@@ -575,4 +575,43 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
       end
     end
   end
+
+  def test_configure_rejects_autodetect
+    # GIVEN a bigquery_insert config that sets autodetect
+    conf = <<-CONFIG
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+      schema [{"name":"time","type":"INTEGER"}]
+      autodetect true
+    CONFIG
+
+    # WHEN the driver is configured
+    # THEN configuration fails with a message that explains the streaming-insert restriction,
+    # so users reaching for this option get an actionable error rather than a silent no-op
+    e = assert_raise(Fluent::ConfigError) { create_driver(conf) }
+    assert_match(/'autodetect' is only supported by 'bigquery_load'/, e.message)
+    assert_match(/streaming insert API/, e.message)
+  end
+
+  def test_configure_rejects_schema_update_options
+    # GIVEN a bigquery_insert config that sets schema_update_options
+    conf = <<-CONFIG
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+      schema [{"name":"time","type":"INTEGER"}]
+      schema_update_options ["ALLOW_FIELD_ADDITION"]
+    CONFIG
+
+    # WHEN the driver is configured
+    # THEN configuration fails with a message that explains the streaming-insert restriction
+    e = assert_raise(Fluent::ConfigError) { create_driver(conf) }
+    assert_match(/'schema_update_options' is only supported by 'bigquery_load'/, e.message)
+    assert_match(/streaming insert API/, e.message)
+  end
 end

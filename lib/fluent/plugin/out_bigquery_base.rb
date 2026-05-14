@@ -57,6 +57,20 @@ module Fluent
       config_param :fetch_schema_table, :string, default: nil
       config_param :schema_cache_expire, :time, default: 600
 
+      # autodetect
+      #   If true, BigQuery infers the schema from the source data. Only valid
+      #   for the load output (`bigquery_load`). The streaming insert API does
+      #   not support autodetect.
+      config_param :autodetect, :bool, default: false
+
+      # schema_update_options
+      #   Allows the destination table's schema to be updated as a side effect
+      #   of the load job. Accepts a subset of:
+      #     - ALLOW_FIELD_ADDITION:   allow adding a nullable field to the schema.
+      #     - ALLOW_FIELD_RELAXATION: allow relaxing a required field to nullable.
+      #   Only valid for the load output (`bigquery_load`).
+      config_param :schema_update_options, :array, value_type: :string, default: nil
+
       ## Timeout
       # request_timeout_sec
       #   Bigquery API response timeout
@@ -139,6 +153,8 @@ module Fluent
           allow_retry_insert_errors: @allow_retry_insert_errors,
           prevent_duplicate_load: @prevent_duplicate_load,
           auto_create_table: @auto_create_table,
+          autodetect: @autodetect,
+          schema_update_options: @schema_update_options,
           time_partitioning_type: @time_partitioning_type,
           time_partitioning_field: @time_partitioning_field,
           time_partitioning_expiration: @time_partitioning_expiration,
