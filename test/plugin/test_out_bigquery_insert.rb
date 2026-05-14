@@ -589,9 +589,11 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
     CONFIG
 
     # WHEN the driver is configured
-    # THEN configuration fails: autodetect is a property of BigQuery load jobs and is not
-    # supported by the streaming insertAll API used by bigquery_insert
-    assert_raise(Fluent::ConfigError) { create_driver(conf) }
+    # THEN configuration fails with a message that explains the streaming-insert restriction,
+    # so users reaching for this option get an actionable error rather than a silent no-op
+    e = assert_raise(Fluent::ConfigError) { create_driver(conf) }
+    assert_match(/'autodetect' is only supported by 'bigquery_load'/, e.message)
+    assert_match(/streaming insert API/, e.message)
   end
 
   def test_configure_rejects_schema_update_options
@@ -607,8 +609,9 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
     CONFIG
 
     # WHEN the driver is configured
-    # THEN configuration fails: schema_update_options is a property of BigQuery load jobs and
-    # is not supported by the streaming insertAll API used by bigquery_insert
-    assert_raise(Fluent::ConfigError) { create_driver(conf) }
+    # THEN configuration fails with a message that explains the streaming-insert restriction
+    e = assert_raise(Fluent::ConfigError) { create_driver(conf) }
+    assert_match(/'schema_update_options' is only supported by 'bigquery_load'/, e.message)
+    assert_match(/streaming insert API/, e.message)
   end
 end

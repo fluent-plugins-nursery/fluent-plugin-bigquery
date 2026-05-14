@@ -55,6 +55,10 @@ module Fluent
         end
 
         if @schema_update_options
+          unless @schema_update_options.is_a?(Array) && !@schema_update_options.empty?
+            raise Fluent::ConfigError,
+              "'schema_update_options' must be a non-empty array of strings; got #{@schema_update_options.inspect}"
+          end
           invalid = @schema_update_options - SCHEMA_UPDATE_OPTIONS
           unless invalid.empty?
             raise Fluent::ConfigError,

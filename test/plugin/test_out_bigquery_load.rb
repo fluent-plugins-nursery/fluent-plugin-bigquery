@@ -342,6 +342,69 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
     end
   end
 
+  def test_write_with_autodetect_and_auto_create_table
+    # GIVEN a bigquery_load output configured with autodetect=true and auto_create_table=true,
+    # and a destination table that does not yet exist (BigQuery returns 404 on get_table)
+    driver = create_driver(<<-CONFIG)
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      <buffer>
+        @type memory
+      </buffer>
+
+      <inject>
+      time_format %s
+      time_key  time
+      </inject>
+
+      auto_create_table true
+      autodetect true
+    CONFIG
+
+    response_stub = stub!
+    stub_writer do |writer|
+      mock(writer).fetch_load_job(is_a(Fluent::BigQuery::Writer::JobReference)) { response_stub }
+      mock(writer).commit_load_job(is_a(String), response_stub)
+
+      mock(writer.client).get_table('yourproject_id', 'yourdataset_id', 'foo') do
+        raise Google::Apis::ClientError.new("notFound: Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404)
+      end
+
+      # THEN the load job carries `autodetect: true` and no `schema:` key — BigQuery infers the
+      # schema and creates the destination table from the load file
+      mock(writer.client).insert_job('yourproject_id', {
+        configuration: {
+          load: {
+            destination_table: {
+              project_id: 'yourproject_id',
+              dataset_id: 'yourdataset_id',
+              table_id: 'foo',
+            },
+            write_disposition: "WRITE_APPEND",
+            source_format: "NEWLINE_DELIMITED_JSON",
+            ignore_unknown_values: false,
+            max_bad_records: 0,
+            autodetect: true,
+          }
+        }
+      }, upload_source: duck_type(:write, :sync, :rewind), content_type: "application/octet-stream") do
+        stub!.job_reference.stub! do |s|
+          s.job_id { "dummy_job_id" }
+          s.location { "us" }
+        end
+      end
+    end
+
+    # WHEN a record is written
+    driver.run do
+      driver.feed("tag", Time.now.to_i, {"a" => "b"})
+    end
+  end
+
   def test_write_with_autodetect
     # GIVEN a bigquery_load output configured with autodetect=true and no explicit schema source
     driver = create_driver(<<-CONFIG)
@@ -533,13 +596,19 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
       private_key_path /path/to/key
       project yourproject_id
       dataset yourdataset_id
+
+      <buffer>
+        @type memory
+      </buffer>
+
       autodetect true
       schema_path #{SCHEMA_PATH}
     CONFIG
 
     # WHEN the driver is configured
-    # THEN configuration fails because autodetect and explicit schema sources are mutually exclusive
-    assert_raise(Fluent::ConfigError) { create_driver(conf) }
+    # THEN configuration fails with a message naming schema_path as the conflicting schema source
+    e = assert_raise(Fluent::ConfigError) { create_driver(conf) }
+    assert_match(/'autodetect' cannot be combined with .*schema_path/, e.message)
   end
 
   def test_configure_autodetect_conflicts_with_fetch_schema
@@ -550,13 +619,19 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
       private_key_path /path/to/key
       project yourproject_id
       dataset yourdataset_id
+
+      <buffer>
+        @type memory
+      </buffer>
+
       autodetect true
       fetch_schema true
     CONFIG
 
     # WHEN the driver is configured
-    # THEN configuration fails
-    assert_raise(Fluent::ConfigError) { create_driver(conf) }
+    # THEN configuration fails with a message naming fetch_schema as the conflict
+    e = assert_raise(Fluent::ConfigError) { create_driver(conf) }
+    assert_match(/'autodetect' cannot be combined with .*fetch_schema/, e.message)
   end
 
   def test_configure_autodetect_conflicts_with_fetch_schema_table
@@ -567,13 +642,19 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
       private_key_path /path/to/key
       project yourproject_id
       dataset yourdataset_id
+
+      <buffer>
+        @type memory
+      </buffer>
+
       autodetect true
       fetch_schema_table foo_schema
     CONFIG
 
     # WHEN the driver is configured
-    # THEN configuration fails
-    assert_raise(Fluent::ConfigError) { create_driver(conf) }
+    # THEN configuration fails with a message naming fetch_schema_table as the conflict
+    e = assert_raise(Fluent::ConfigError) { create_driver(conf) }
+    assert_match(/'autodetect' cannot be combined with .*fetch_schema_table/, e.message)
   end
 
   def test_configure_autodetect_conflicts_with_inline_schema
@@ -584,13 +665,19 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
       private_key_path /path/to/key
       project yourproject_id
       dataset yourdataset_id
+
+      <buffer>
+        @type memory
+      </buffer>
+
       autodetect true
       schema [{"name":"time","type":"INTEGER"}]
     CONFIG
 
     # WHEN the driver is configured
-    # THEN configuration fails
-    assert_raise(Fluent::ConfigError) { create_driver(conf) }
+    # THEN configuration fails with a message naming schema as the conflict
+    e = assert_raise(Fluent::ConfigError) { create_driver(conf) }
+    assert_match(/'autodetect' cannot be combined with .*\bschema\b/, e.message)
   end
 
   def test_configure_schema_update_options_rejects_unknown_value
@@ -601,13 +688,42 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
       private_key_path /path/to/key
       project yourproject_id
       dataset yourdataset_id
+
+      <buffer>
+        @type memory
+      </buffer>
+
       schema_path #{SCHEMA_PATH}
       schema_update_options ["ALLOW_FIELD_ADDITION", "BOGUS_OPTION"]
     CONFIG
 
     # WHEN the driver is configured
-    # THEN configuration fails because each entry must be a recognised BigQuery schema-update option
-    assert_raise(Fluent::ConfigError) { create_driver(conf) }
+    # THEN configuration fails with a message that quotes the offending value
+    e = assert_raise(Fluent::ConfigError) { create_driver(conf) }
+    assert_match(/'schema_update_options' contains unknown value.*BOGUS_OPTION/, e.message)
+  end
+
+  def test_configure_schema_update_options_rejects_empty_array
+    # GIVEN a config that sets schema_update_options to an empty array
+    conf = <<-CONFIG
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      <buffer>
+        @type memory
+      </buffer>
+
+      schema_path #{SCHEMA_PATH}
+      schema_update_options []
+    CONFIG
+
+    # WHEN the driver is configured
+    # THEN configuration fails — an empty array would silently no-op rather than evolve the schema
+    e = assert_raise(Fluent::ConfigError) { create_driver(conf) }
+    assert_match(/'schema_update_options' must be a non-empty array/, e.message)
   end
 
   def test_configure_schema_update_options_requires_evolvable_schema
@@ -618,14 +734,22 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
       private_key_path /path/to/key
       project yourproject_id
       dataset yourdataset_id
+
+      <buffer>
+        @type memory
+      </buffer>
+
       fetch_schema true
       schema_update_options ["ALLOW_FIELD_ADDITION"]
     CONFIG
 
     # WHEN the driver is configured
     # THEN configuration fails because fetch_schema mirrors the destination table and so can never
-    # carry new columns for BigQuery to add (the option would silently no-op)
-    assert_raise(Fluent::ConfigError) { create_driver(conf) }
+    # carry new columns for BigQuery to add (the option would silently no-op); the message
+    # encodes that rationale so future maintainers don't loosen the rule by accident
+    e = assert_raise(Fluent::ConfigError) { create_driver(conf) }
+    assert_match(/'schema_update_options' requires 'autodetect', 'schema', or 'schema_path'/, e.message)
+    assert_match(/no-op/, e.message)
   end
 
   def test_configure_schema_update_options_accepts_field_relaxation

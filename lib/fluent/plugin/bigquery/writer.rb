@@ -144,8 +144,9 @@ module Fluent
         configuration[:configuration][:load].merge!(schema_update_options: @options[:schema_update_options]) if @options[:schema_update_options]
         # When schema_update_options is set with an explicit schema source (schema/schema_path),
         # send the schema in the load config so BigQuery can compare it against the destination
-        # table and apply the requested additions/relaxations. autodetect covers the no-explicit-schema
-        # case; the auto_create_table branch below covers missing tables.
+        # table and apply the requested additions/relaxations. The autodetect path leaves the
+        # schema unset so BigQuery infers it from the data; the 404 fallback further down handles
+        # missing destination tables.
         if @options[:schema_update_options] && !@options[:autodetect] && !fields.empty?
           configuration[:configuration][:load].merge!(schema: {fields: fields.to_a})
         end

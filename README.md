@@ -82,8 +82,11 @@ Note: `autodetect` and `schema_update_options` are properties of BigQuery load j
 | :------------------------------------- | :------------ | :----------- | :----------  | :------------------------- | :-----------------------                                                                                                                       |
 | source_format                          | enum          | no           | no           | json                       | Specify source format `json` or `csv` or `avro`. If you change this parameter, you must change formatter plugin via `<format>` config section. |
 | max_bad_records                        | integer       | no           | no           | 0                          | If the number of bad records exceeds this value, an invalid error is returned in the job result.                                               |
-| autodetect                             | bool          | no           | no           | false                      | If true, BigQuery infers the destination table's schema from the source data on each load job. Mutually exclusive with `schema`, `schema_path`, `fetch_schema`, and `fetch_schema_table`. See "Schema evolution" below. |
-| schema_update_options                  | array         | no           | no           | nil                        | Subset of `["ALLOW_FIELD_ADDITION", "ALLOW_FIELD_RELAXATION"]`. Lets the load job evolve the destination table's schema as a side effect: add new NULLABLE columns and/or relax REQUIRED columns to NULLABLE. Requires `autodetect` or an explicit `schema`/`schema_path` to supply the new columns; combining it with only `fetch_schema` is a config error because the fetched schema mirrors the existing table. See "Schema evolution" below. |
+| autodetect                             | bool          | no           | no           | false                      | Let BigQuery infer the schema from the data. See "Schema evolution" below. [^autodetect-mx] |
+| schema_update_options                  | array         | no           | no           | nil                        | Subset of `["ALLOW_FIELD_ADDITION", "ALLOW_FIELD_RELAXATION"]`. See "Schema evolution" below. [^sch-upd-requires] |
+
+[^autodetect-mx]: Mutually exclusive with `schema`, `schema_path`, `fetch_schema`, and `fetch_schema_table`; combining any of them with `autodetect` is a config error.
+[^sch-upd-requires]: Requires `autodetect`, `schema`, or `schema_path`; combining it with only `fetch_schema` is a config error because the fetched schema mirrors the existing table and so can never carry new columns. An empty array is also rejected.
 
 ### Buffer section
 
@@ -292,7 +295,7 @@ I recommend to use file buffer and long flush interval.
 
 #### Schema evolution
 
-By default, `bigquery_load` either coerces records against an explicit schema (`schema` / `schema_path`) or against the destination table's existing schema (`fetch_schema`), and `ignore_unknown_values: true` silently drops fields that aren't already in the table. As a result, adding a new field to your payload requires a manual `ALTER TABLE` before that field is persisted.
+By default, `bigquery_load` coerces records against an explicit schema (`schema` / `schema_path`) or against the destination table's existing schema (`fetch_schema`). Either way, the load job's declared schema mirrors the destination table, so adding a new field to your payload requires a manual `ALTER TABLE` before that field is persisted. `ignore_unknown_values: true` (off by default, but commonly enabled to keep loads from failing on new fields) makes that drop silent rather than noisy.
 
 BigQuery's load API can do this for you. Combine `autodetect` (or an updated `schema`/`schema_path`) with `schema_update_options: ["ALLOW_FIELD_ADDITION"]` and the destination table's schema is updated as a side effect of each load job — new fields appear as NULLABLE columns automatically.
 
@@ -317,9 +320,9 @@ BigQuery's load API can do this for you. Combine `autodetect` (or an updated `sc
   autodetect            true
   schema_update_options ["ALLOW_FIELD_ADDITION"]
 
-  # The default (true) silently drops fields not in the existing schema, which
-  # defeats the point of ALLOW_FIELD_ADDITION; turn it off so new fields reach
-  # BigQuery's autodetect step.
+  # If you previously enabled ignore_unknown_values to avoid load failures on
+  # new fields, turn it off here so those fields reach BigQuery's autodetect
+  # step instead of being stripped.
   ignore_unknown_values false
 </match>
 ```
@@ -330,7 +333,7 @@ Notes:
 - `schema_update_options` requires `write_disposition: WRITE_APPEND`, which this plugin always uses.
 - `ALLOW_FIELD_RELAXATION` may also be passed; it relaxes existing `REQUIRED` columns to `NULLABLE`.
 - `autodetect` is mutually exclusive with `schema`, `schema_path`, `fetch_schema`, and `fetch_schema_table` (these are all rejected at configure time).
-- `schema_update_options` is only meaningful when the load job's declared schema can contain new columns. Setting it with only `fetch_schema` is rejected because the fetched schema mirrors the destination table and can never introduce a new column.
+- `schema_update_options` is only meaningful when the load job's declared schema can contain new columns. Setting it with only `fetch_schema` is rejected because the fetched schema mirrors the destination table and can never introduce a new column. An empty array is also rejected.
 - For explicit schema management, pair `schema_path` with `schema_update_options`: BigQuery diff-applies your schema file against the table on every load.
 
 ### Authentication

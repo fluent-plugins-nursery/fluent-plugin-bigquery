@@ -69,7 +69,7 @@ module Fluent
       #     - ALLOW_FIELD_ADDITION:   allow adding a nullable field to the schema.
       #     - ALLOW_FIELD_RELAXATION: allow relaxing a required field to nullable.
       #   Only valid for the load output (`bigquery_load`).
-      config_param :schema_update_options, :array, default: nil
+      config_param :schema_update_options, :array, value_type: :string, default: nil
 
       ## Timeout
       # request_timeout_sec
