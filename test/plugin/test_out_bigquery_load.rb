@@ -342,6 +342,314 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
     end
   end
 
+  def test_write_with_autodetect
+    # GIVEN a bigquery_load output configured with autodetect=true and no explicit schema source
+    driver = create_driver(<<-CONFIG)
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      <buffer>
+        @type memory
+      </buffer>
+
+      <inject>
+      time_format %s
+      time_key  time
+      </inject>
+
+      autodetect true
+    CONFIG
+
+    response_stub = stub!
+    stub_writer do |writer|
+      mock(writer).fetch_load_job(is_a(Fluent::BigQuery::Writer::JobReference)) { response_stub }
+      mock(writer).commit_load_job(is_a(String), response_stub)
+
+      mock(writer.client).get_table('yourproject_id', 'yourdataset_id', 'foo') { nil }
+
+      # THEN the load job submitted to BigQuery has `autodetect: true` and no explicit `schema:` key
+      mock(writer.client).insert_job('yourproject_id', {
+        configuration: {
+          load: {
+            destination_table: {
+              project_id: 'yourproject_id',
+              dataset_id: 'yourdataset_id',
+              table_id: 'foo',
+            },
+            write_disposition: "WRITE_APPEND",
+            source_format: "NEWLINE_DELIMITED_JSON",
+            ignore_unknown_values: false,
+            max_bad_records: 0,
+            autodetect: true,
+          }
+        }
+      }, upload_source: duck_type(:write, :sync, :rewind), content_type: "application/octet-stream") do
+        stub!.job_reference.stub! do |s|
+          s.job_id { "dummy_job_id" }
+          s.location { "us" }
+        end
+      end
+    end
+
+    # WHEN a record is written
+    driver.run do
+      driver.feed("tag", Time.now.to_i, {"a" => "b"})
+    end
+  end
+
+  def test_write_with_schema_update_options_and_schema_path
+    # GIVEN a bigquery_load output configured with an explicit schema_path and ALLOW_FIELD_ADDITION
+    driver = create_driver(<<-CONFIG)
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      <buffer>
+        @type memory
+      </buffer>
+
+      <inject>
+      time_format %s
+      time_key  time
+      </inject>
+
+      schema_path #{SCHEMA_PATH}
+      schema_update_options ["ALLOW_FIELD_ADDITION"]
+    CONFIG
+
+    schema_fields = Fluent::BigQuery::Helper.deep_symbolize_keys(MultiJson.load(File.read(SCHEMA_PATH)))
+
+    response_stub = stub!
+    stub_writer do |writer|
+      mock(writer).fetch_load_job(is_a(Fluent::BigQuery::Writer::JobReference)) { response_stub }
+      mock(writer).commit_load_job(is_a(String), response_stub)
+
+      mock(writer.client).get_table('yourproject_id', 'yourdataset_id', 'foo') { nil }
+
+      # THEN the load job submitted to BigQuery carries the configured schema AND schema_update_options,
+      # so BigQuery can compare the supplied schema against the destination table and add/relax columns
+      mock(writer.client).insert_job('yourproject_id', {
+        configuration: {
+          load: {
+            destination_table: {
+              project_id: 'yourproject_id',
+              dataset_id: 'yourdataset_id',
+              table_id: 'foo',
+            },
+            write_disposition: "WRITE_APPEND",
+            source_format: "NEWLINE_DELIMITED_JSON",
+            ignore_unknown_values: false,
+            max_bad_records: 0,
+            schema_update_options: ["ALLOW_FIELD_ADDITION"],
+            schema: {
+              fields: schema_fields,
+            },
+          }
+        }
+      }, upload_source: duck_type(:write, :sync, :rewind), content_type: "application/octet-stream") do
+        stub!.job_reference.stub! do |s|
+          s.job_id { "dummy_job_id" }
+          s.location { "us" }
+        end
+      end
+    end
+
+    # WHEN a record is written
+    driver.run do
+      driver.feed("tag", Time.now.to_i, {"a" => "b"})
+    end
+  end
+
+  def test_write_with_autodetect_and_schema_update_options
+    # GIVEN a bigquery_load output configured with autodetect AND both schema_update_options values
+    driver = create_driver(<<-CONFIG)
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      <buffer>
+        @type memory
+      </buffer>
+
+      <inject>
+      time_format %s
+      time_key  time
+      </inject>
+
+      autodetect true
+      schema_update_options ["ALLOW_FIELD_ADDITION", "ALLOW_FIELD_RELAXATION"]
+    CONFIG
+
+    response_stub = stub!
+    stub_writer do |writer|
+      mock(writer).fetch_load_job(is_a(Fluent::BigQuery::Writer::JobReference)) { response_stub }
+      mock(writer).commit_load_job(is_a(String), response_stub)
+
+      mock(writer.client).get_table('yourproject_id', 'yourdataset_id', 'foo') { nil }
+
+      # THEN the load job carries `autodetect: true` AND both schema_update_options, and no explicit `schema:`
+      mock(writer.client).insert_job('yourproject_id', {
+        configuration: {
+          load: {
+            destination_table: {
+              project_id: 'yourproject_id',
+              dataset_id: 'yourdataset_id',
+              table_id: 'foo',
+            },
+            write_disposition: "WRITE_APPEND",
+            source_format: "NEWLINE_DELIMITED_JSON",
+            ignore_unknown_values: false,
+            max_bad_records: 0,
+            autodetect: true,
+            schema_update_options: ["ALLOW_FIELD_ADDITION", "ALLOW_FIELD_RELAXATION"],
+          }
+        }
+      }, upload_source: duck_type(:write, :sync, :rewind), content_type: "application/octet-stream") do
+        stub!.job_reference.stub! do |s|
+          s.job_id { "dummy_job_id" }
+          s.location { "us" }
+        end
+      end
+    end
+
+    # WHEN a record is written
+    driver.run do
+      driver.feed("tag", Time.now.to_i, {"a" => "b"})
+    end
+  end
+
+  def test_configure_autodetect_conflicts_with_schema_path
+    # GIVEN a config that combines autodetect with schema_path
+    conf = <<-CONFIG
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+      autodetect true
+      schema_path #{SCHEMA_PATH}
+    CONFIG
+
+    # WHEN the driver is configured
+    # THEN configuration fails because autodetect and explicit schema sources are mutually exclusive
+    assert_raise(Fluent::ConfigError) { create_driver(conf) }
+  end
+
+  def test_configure_autodetect_conflicts_with_fetch_schema
+    # GIVEN a config that combines autodetect with fetch_schema
+    conf = <<-CONFIG
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+      autodetect true
+      fetch_schema true
+    CONFIG
+
+    # WHEN the driver is configured
+    # THEN configuration fails
+    assert_raise(Fluent::ConfigError) { create_driver(conf) }
+  end
+
+  def test_configure_autodetect_conflicts_with_fetch_schema_table
+    # GIVEN a config that combines autodetect with fetch_schema_table
+    conf = <<-CONFIG
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+      autodetect true
+      fetch_schema_table foo_schema
+    CONFIG
+
+    # WHEN the driver is configured
+    # THEN configuration fails
+    assert_raise(Fluent::ConfigError) { create_driver(conf) }
+  end
+
+  def test_configure_autodetect_conflicts_with_inline_schema
+    # GIVEN a config that combines autodetect with an inline schema
+    conf = <<-CONFIG
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+      autodetect true
+      schema [{"name":"time","type":"INTEGER"}]
+    CONFIG
+
+    # WHEN the driver is configured
+    # THEN configuration fails
+    assert_raise(Fluent::ConfigError) { create_driver(conf) }
+  end
+
+  def test_configure_schema_update_options_rejects_unknown_value
+    # GIVEN a config with a schema_update_options entry that isn't a valid BigQuery enum value
+    conf = <<-CONFIG
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+      schema_path #{SCHEMA_PATH}
+      schema_update_options ["ALLOW_FIELD_ADDITION", "BOGUS_OPTION"]
+    CONFIG
+
+    # WHEN the driver is configured
+    # THEN configuration fails because each entry must be a recognised BigQuery schema-update option
+    assert_raise(Fluent::ConfigError) { create_driver(conf) }
+  end
+
+  def test_configure_schema_update_options_requires_evolvable_schema
+    # GIVEN a config that sets schema_update_options with only fetch_schema (no explicit/inferred schema source)
+    conf = <<-CONFIG
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+      fetch_schema true
+      schema_update_options ["ALLOW_FIELD_ADDITION"]
+    CONFIG
+
+    # WHEN the driver is configured
+    # THEN configuration fails because fetch_schema mirrors the destination table and so can never
+    # carry new columns for BigQuery to add (the option would silently no-op)
+    assert_raise(Fluent::ConfigError) { create_driver(conf) }
+  end
+
+  def test_configure_schema_update_options_accepts_field_relaxation
+    # GIVEN a config that pairs ALLOW_FIELD_RELAXATION with an explicit schema_path
+    conf = <<-CONFIG
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      <buffer>
+        @type memory
+      </buffer>
+
+      schema_path #{SCHEMA_PATH}
+      schema_update_options ["ALLOW_FIELD_RELAXATION"]
+    CONFIG
+
+    # WHEN the driver is configured
+    # THEN configuration succeeds: ALLOW_FIELD_RELAXATION is a valid option and schema_path supplies an evolvable schema
+    assert_nothing_raised { create_driver(conf) }
+  end
+
   private
 
   def create_response_stub(response)

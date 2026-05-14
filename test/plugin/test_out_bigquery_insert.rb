@@ -575,4 +575,40 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
       end
     end
   end
+
+  def test_configure_rejects_autodetect
+    # GIVEN a bigquery_insert config that sets autodetect
+    conf = <<-CONFIG
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+      schema [{"name":"time","type":"INTEGER"}]
+      autodetect true
+    CONFIG
+
+    # WHEN the driver is configured
+    # THEN configuration fails: autodetect is a property of BigQuery load jobs and is not
+    # supported by the streaming insertAll API used by bigquery_insert
+    assert_raise(Fluent::ConfigError) { create_driver(conf) }
+  end
+
+  def test_configure_rejects_schema_update_options
+    # GIVEN a bigquery_insert config that sets schema_update_options
+    conf = <<-CONFIG
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+      schema [{"name":"time","type":"INTEGER"}]
+      schema_update_options ["ALLOW_FIELD_ADDITION"]
+    CONFIG
+
+    # WHEN the driver is configured
+    # THEN configuration fails: schema_update_options is a property of BigQuery load jobs and
+    # is not supported by the streaming insertAll API used by bigquery_insert
+    assert_raise(Fluent::ConfigError) { create_driver(conf) }
+  end
 end

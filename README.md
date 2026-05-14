@@ -74,12 +74,16 @@ Because embedded gem dependency sometimes restricts ruby environment.
 | allow_retry_insert_errors              | bool          | no           | no           | false                      | Retry to insert rows when an insertErrors occurs. There is a possibility that rows are inserted in duplicate.                                                                              |
 | require_partition_filter    | bool          | no                                           | no           | false                      | If true, queries over this table require a partition filter that can be used for partition elimination to be specified. |
 
+Note: `autodetect` and `schema_update_options` are properties of BigQuery load jobs and are not supported by the streaming insert API used by `bigquery_insert`. Setting either is a config error; see `bigquery_load` below.
+
 #### bigquery_load
 
 | name                                   | type          | required?    | placeholder? | default                    | description                                                                                                                                    |
 | :------------------------------------- | :------------ | :----------- | :----------  | :------------------------- | :-----------------------                                                                                                                       |
 | source_format                          | enum          | no           | no           | json                       | Specify source format `json` or `csv` or `avro`. If you change this parameter, you must change formatter plugin via `<format>` config section. |
 | max_bad_records                        | integer       | no           | no           | 0                          | If the number of bad records exceeds this value, an invalid error is returned in the job result.                                               |
+| autodetect                             | bool          | no           | no           | false                      | If true, BigQuery infers the destination table's schema from the source data on each load job. Mutually exclusive with `schema`, `schema_path`, `fetch_schema`, and `fetch_schema_table`. See "Schema evolution" below. |
+| schema_update_options                  | array         | no           | no           | nil                        | Subset of `["ALLOW_FIELD_ADDITION", "ALLOW_FIELD_RELAXATION"]`. Lets the load job evolve the destination table's schema as a side effect: add new NULLABLE columns and/or relax REQUIRED columns to NULLABLE. Requires `autodetect` or an explicit `schema`/`schema_path` to supply the new columns; combining it with only `fetch_schema` is a config error because the fetched schema mirrors the existing table. See "Schema evolution" below. |
 
 ### Buffer section
 
@@ -285,6 +289,49 @@ section in the Google BigQuery document.
 ```
 
 I recommend to use file buffer and long flush interval.
+
+#### Schema evolution
+
+By default, `bigquery_load` either coerces records against an explicit schema (`schema` / `schema_path`) or against the destination table's existing schema (`fetch_schema`), and `ignore_unknown_values: true` silently drops fields that aren't already in the table. As a result, adding a new field to your payload requires a manual `ALTER TABLE` before that field is persisted.
+
+BigQuery's load API can do this for you. Combine `autodetect` (or an updated `schema`/`schema_path`) with `schema_update_options: ["ALLOW_FIELD_ADDITION"]` and the destination table's schema is updated as a side effect of each load job — new fields appear as NULLABLE columns automatically.
+
+```apache
+<match events>
+  @type bigquery_load
+
+  <buffer>
+    path bigquery.*.buffer
+    flush_interval 3600
+  </buffer>
+
+  auth_method json_key
+  json_key /path/to/key.json
+
+  project   yourproject_id
+  dataset   yourdataset_id
+  table     events
+
+  # Let BigQuery infer the schema from each load file and add any new columns
+  # it sees to the destination table.
+  autodetect            true
+  schema_update_options ["ALLOW_FIELD_ADDITION"]
+
+  # The default (true) silently drops fields not in the existing schema, which
+  # defeats the point of ALLOW_FIELD_ADDITION; turn it off so new fields reach
+  # BigQuery's autodetect step.
+  ignore_unknown_values false
+</match>
+```
+
+Notes:
+
+- New columns are always added as `NULLABLE` (a BigQuery constraint of `ALLOW_FIELD_ADDITION`).
+- `schema_update_options` requires `write_disposition: WRITE_APPEND`, which this plugin always uses.
+- `ALLOW_FIELD_RELAXATION` may also be passed; it relaxes existing `REQUIRED` columns to `NULLABLE`.
+- `autodetect` is mutually exclusive with `schema`, `schema_path`, `fetch_schema`, and `fetch_schema_table` (these are all rejected at configure time).
+- `schema_update_options` is only meaningful when the load job's declared schema can contain new columns. Setting it with only `fetch_schema` is rejected because the fetched schema mirrors the destination table and can never introduce a new column.
+- For explicit schema management, pair `schema_path` with `schema_update_options`: BigQuery diff-applies your schema file against the table on every load.
 
 ### Authentication
 
