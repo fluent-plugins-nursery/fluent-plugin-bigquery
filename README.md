@@ -39,7 +39,7 @@ Because embedded gem dependency sometimes restricts ruby environment.
 #### common
 
 | name                                          | type          | required?                                    | placeholder? | default                    | description                                                                                            |
-| :-------------------------------------------- | :------------ | :-----------                                 | :----------  | :------------------------- | :-----------------------                                                                               |
+| :-------------------------------------------- | :------------ | :------------------------------------------- | :----------  | :------------------------- | :-----------------------                                                                               |
 | auth_method                                   | enum          | yes                                          | no           | private_key                | `private_key` or `json_key` or `compute_engine` or `application_default` (GKE Workload Identity)       |
 | email                                         | string        | yes (private_key)                            | no           | nil                        | GCP Service Account Email                                                                              |
 | private_key_path                              | string        | yes (private_key)                            | no           | nil                        | GCP Private Key file path                                                                              |
@@ -72,7 +72,7 @@ Because embedded gem dependency sometimes restricts ruby environment.
 | insert_id_field                        | string        | no           | no           | nil                        | Use key as `insert_id` of Streaming Insert API parameter. see. https://docs.fluentd.org/v1.0/articles/api-plugin-helper-record_accessor                                                    |
 | add_insert_timestamp                   | string        | no           | no           | nil                        | Adds a timestamp column just before sending the rows to BigQuery, so that buffering time is not taken into account. Gives a field in BigQuery which represents the insert time of the row. |
 | allow_retry_insert_errors              | bool          | no           | no           | false                      | Retry to insert rows when an insertErrors occurs. There is a possibility that rows are inserted in duplicate.                                                                              |
-| require_partition_filter    | bool          | no                                           | no           | false                      | If true, queries over this table require a partition filter that can be used for partition elimination to be specified. |
+| require_partition_filter               | bool          | no           | no           | false                      | If true, queries over this table require a partition filter that can be used for partition elimination to be specified.                                                                    |
 
 Note: `autodetect` and `schema_update_options` are properties of BigQuery load jobs and are not supported by the streaming insert API used by `bigquery_insert`. Setting either is a config error; see `bigquery_load` below.
 
@@ -82,8 +82,8 @@ Note: `autodetect` and `schema_update_options` are properties of BigQuery load j
 | :------------------------------------- | :------------ | :----------- | :----------  | :------------------------- | :-----------------------                                                                                                                       |
 | source_format                          | enum          | no           | no           | json                       | Specify source format `json` or `csv` or `avro`. If you change this parameter, you must change formatter plugin via `<format>` config section. |
 | max_bad_records                        | integer       | no           | no           | 0                          | If the number of bad records exceeds this value, an invalid error is returned in the job result.                                               |
-| autodetect                             | bool          | no           | no           | false                      | Let BigQuery infer the schema from the data. See "Schema evolution" below. [^autodetect-mx] |
-| schema_update_options                  | array         | no           | no           | nil                        | Subset of `["ALLOW_FIELD_ADDITION", "ALLOW_FIELD_RELAXATION"]`. See "Schema evolution" below. [^sch-upd-requires] |
+| autodetect                             | bool          | no           | no           | false                      | Let BigQuery infer the schema from the data. See "Schema evolution" below. [^autodetect-mx]                                                    |
+| schema_update_options                  | array         | no           | no           | nil                        | Subset of `["ALLOW_FIELD_ADDITION", "ALLOW_FIELD_RELAXATION"]`. See "Schema evolution" below. [^sch-upd-requires]                              |
 
 [^autodetect-mx]: Mutually exclusive with `schema`, `schema_path`, `fetch_schema`, and `fetch_schema_table`; combining any of them with `autodetect` is a config error.
 [^sch-upd-requires]: Requires `autodetect`, `schema`, or `schema_path`; combining it with only `fetch_schema` is a config error because the fetched schema mirrors the existing table and so can never carry new columns. An empty array is also rejected.
@@ -91,7 +91,7 @@ Note: `autodetect` and `schema_update_options` are properties of BigQuery load j
 ### Buffer section
 
 | name                                   | type          | required?    | default                        | description                        |
-| :------------------------------------- | :------------ | :----------- | :-------------------------     | :-----------------------           |
+| :------------------------------------- | :------------ | :----------- | :----------------------------- | :-----------------------           |
 | @type                                  | string        | no           | memory (insert) or file (load) |                                    |
 | chunk_limit_size                       | integer       | no           | 1MB (insert) or 1GB (load)     |                                    |
 | total_limit_size                       | integer       | no           | 1GB (insert) or 32GB (load)    |                                    |
