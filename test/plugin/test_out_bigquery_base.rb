@@ -172,7 +172,8 @@ class BigQueryBaseOutputTest < Test::Unit::TestCase
   end
 
   def test_configure_auth_application_default
-    omit "This testcase depends on some environment variables." if ENV["CI"] == "true"
+    authorization = Object.new
+    stub(Google::Auth).get_application_default([API_SCOPE]) { authorization }
 
     driver = create_driver(%[
       table foo
