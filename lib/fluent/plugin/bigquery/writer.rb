@@ -140,6 +140,17 @@ module Fluent
           }
         }
 
+        configuration[:configuration][:load].merge!(autodetect: true) if @options[:autodetect]
+        configuration[:configuration][:load].merge!(schema_update_options: @options[:schema_update_options]) if @options[:schema_update_options]
+        # When schema_update_options is set with an explicit schema source (schema/schema_path),
+        # send the schema in the load config so BigQuery can compare it against the destination
+        # table and apply the requested additions/relaxations. The autodetect path leaves the
+        # schema unset so BigQuery infers it from the data; the 404 fallback further down handles
+        # missing destination tables.
+        if @options[:schema_update_options] && !@options[:autodetect] && !fields.empty?
+          configuration[:configuration][:load].merge!(schema: {fields: fields.to_a})
+        end
+
         job_id = create_job_id(chunk_id_hex, dataset, table_id, fields.to_a) if @options[:prevent_duplicate_load]
         configuration.merge!({job_reference: {project_id: project, job_id: job_id}}) if job_id
 
@@ -149,8 +160,10 @@ module Fluent
         rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
           if e.status_code == 404 && /Not Found: Table/i =~ e.message
             raise Fluent::BigQuery::UnRetryableError.new("Table is not found") unless @options[:auto_create_table]
-            raise Fluent::BigQuery::UnRetryableError.new("Schema is empty") if fields.empty?
-            configuration[:configuration][:load].merge!(schema: {fields: fields.to_a})
+            unless @options[:autodetect]
+              raise Fluent::BigQuery::UnRetryableError.new("Schema is empty") if fields.empty?
+              configuration[:configuration][:load].merge!(schema: {fields: fields.to_a})
+            end
             configuration[:configuration][:load].merge!(time_partitioning: time_partitioning) if time_partitioning
             configuration[:configuration][:load].merge!(clustering: clustering) if clustering
           end

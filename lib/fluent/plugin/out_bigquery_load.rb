@@ -5,6 +5,10 @@ module Fluent
     class BigQueryLoadOutput < BigQueryBaseOutput
       Fluent::Plugin.register_output('bigquery_load', self)
 
+      # Valid values for the `schema_update_options` config parameter.
+      # See: https://cloud.google.com/bigquery/docs/reference/rest/v2/Job#JobConfigurationLoad.FIELDS.schema_update_options
+      SCHEMA_UPDATE_OPTIONS = %w[ALLOW_FIELD_ADDITION ALLOW_FIELD_RELAXATION].freeze
+
       helpers :timer
 
       config_param :source_format, :enum, list: [:json, :avro, :csv], default: :json
@@ -37,6 +41,34 @@ module Fluent
       def configure(conf)
         super
         @is_load = true
+
+        if @autodetect
+          conflicts = []
+          conflicts << 'schema'             if @schema
+          conflicts << 'schema_path'        if @schema_path
+          conflicts << 'fetch_schema'       if @fetch_schema
+          conflicts << 'fetch_schema_table' if @fetch_schema_table
+          unless conflicts.empty?
+            raise Fluent::ConfigError,
+              "'autodetect' cannot be combined with #{conflicts.join(', ')}; provide a schema or let BigQuery infer one, not both"
+          end
+        end
+
+        if @schema_update_options
+          unless @schema_update_options.is_a?(Array) && !@schema_update_options.empty?
+            raise Fluent::ConfigError,
+              "'schema_update_options' must be a non-empty array of strings; got #{@schema_update_options.inspect}"
+          end
+          invalid = @schema_update_options - SCHEMA_UPDATE_OPTIONS
+          unless invalid.empty?
+            raise Fluent::ConfigError,
+              "'schema_update_options' contains unknown value(s) #{invalid.inspect}; allowed values are #{SCHEMA_UPDATE_OPTIONS.inspect}"
+          end
+          unless @autodetect || @schema || @schema_path
+            raise Fluent::ConfigError,
+              "'schema_update_options' requires 'autodetect', 'schema', or 'schema_path'; combining it with only 'fetch_schema' is a no-op because the fetched schema is identical to the existing table's schema and contains no new fields to add"
+          end
+        end
 
         placeholder_params = "project=#{@project}/dataset=#{@dataset}/table=#{@tablelist.join(",")}/fetch_schema_table=#{@fetch_schema_table}"
         placeholder_validate!(:bigquery_load, placeholder_params)
