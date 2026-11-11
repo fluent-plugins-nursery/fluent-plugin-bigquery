@@ -173,7 +173,7 @@ class BigQueryBaseOutputTest < Test::Unit::TestCase
 
   def test_configure_auth_application_default
     authorization = Object.new
-    stub(Google::Auth).get_application_default([API_SCOPE]) { authorization }
+    mock(Google::Auth).get_application_default([API_SCOPE]) { authorization }
 
     driver = create_driver(%[
       table foo
