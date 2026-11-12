@@ -342,6 +342,50 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
     end
   end
 
+  def test_write_with_auto_create_table_time_partitioning_expiration_in_seconds
+    driver = create_driver(<<-CONFIG)
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      <buffer>
+        @type memory
+      </buffer>
+
+      auto_create_table true
+      schema_path #{SCHEMA_PATH}
+
+      time_partitioning_type day
+      time_partitioning_expiration 2592000
+    CONFIG
+
+    job = nil
+    stub_writer do |writer|
+      mock(writer.client).get_table('yourproject_id', 'yourdataset_id', 'foo') do
+        raise Google::Apis::ClientError.new("notFound: Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404)
+      end
+
+      mock(writer.client).insert_job('yourproject_id', anything, upload_source: duck_type(:write, :sync, :rewind), content_type: "application/octet-stream") do |_, configuration, _|
+        job = configuration
+        stub!.job_reference.stub! do |s|
+          s.job_id { "dummy_job_id" }
+          s.location { "us" }
+        end
+      end
+    end
+
+    driver.run do
+      driver.feed("tag", Time.now.to_i, {"a" => "b"})
+    end
+
+    time_partitioning = job[:configuration][:load][:time_partitioning]
+    assert_equal({type: "DAY", expiration_ms: 2592000000}, time_partitioning)
+    json = Google::Apis::BigqueryV2::Job::Representation.new(job).to_json(user_options: { skip_undefined: true })
+    assert_equal({"type" => "DAY", "expirationMs" => "2592000000"}, JSON.parse(json)["configuration"]["load"]["timePartitioning"])
+  end
+
   private
 
   def create_response_stub(response)
