@@ -60,7 +60,7 @@ Because embedded gem dependency sometimes restricts ruby environment.
 | request_open_timeout_sec                      | integer       | no                                           | no           | 60                         | Bigquery API connection, and request timeout. If you send big data to Bigquery, set large value.       |
 | time_partitioning_type                        | enum          | no (either day or hour)                      | no           | nil                        | Type of bigquery time partitioning feature.                                                            |
 | time_partitioning_field                       | string        | no                                           | no           | nil                        | Field used to determine how to create a time-based partition.                                          |
-| time_partitioning_expiration                  | time          | no                                           | no           | nil                        | Expiration of each partition, as a time value (`2592000`, `720h`, `30d`). It is sent to BigQuery in milliseconds. |
+| time_partitioning_expiration                  | time          | no                                           | no           | nil                        | Expiration of each partition, as a time value (`2592000`, `720h`, `30d`). A plain number is in seconds. It is sent to BigQuery in milliseconds. |
 | clustering_fields                             | array(string) | no                                           | no           | nil                        | One or more fields on which data should be clustered. The order of the specified columns determines the sort order of the data. |
 
 #### bigquery_insert

@@ -362,7 +362,11 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
     CONFIG
 
     job = nil
+    response_stub = stub!
     stub_writer do |writer|
+      mock(writer).fetch_load_job(is_a(Fluent::BigQuery::Writer::JobReference)) { response_stub }
+      mock(writer).commit_load_job(is_a(String), response_stub)
+
       mock(writer.client).get_table('yourproject_id', 'yourdataset_id', 'foo') do
         raise Google::Apis::ClientError.new("notFound: Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404)
       end
@@ -382,6 +386,7 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
 
     time_partitioning = job[:configuration][:load][:time_partitioning]
     assert_equal({type: "DAY", expiration_ms: 2592000000}, time_partitioning)
+    assert_kind_of(Integer, time_partitioning[:expiration_ms])
     json = Google::Apis::BigqueryV2::Job::Representation.new(job).to_json(user_options: { skip_undefined: true })
     assert_equal({"type" => "DAY", "expirationMs" => "2592000000"}, JSON.parse(json)["configuration"]["load"]["timePartitioning"])
   end
