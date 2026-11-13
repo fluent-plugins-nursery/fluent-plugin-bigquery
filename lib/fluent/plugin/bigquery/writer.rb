@@ -313,7 +313,7 @@ module Fluent
           @time_partitioning = {
             type: @options[:time_partitioning_type].to_s.upcase,
             field: @options[:time_partitioning_field] ? @options[:time_partitioning_field].to_s : nil,
-            expiration_ms: @options[:time_partitioning_expiration] ? @options[:time_partitioning_expiration] * 1000 : nil,
+            expiration_ms: @options[:time_partitioning_expiration] ? (@options[:time_partitioning_expiration] * 1000).to_i : nil,
           }.reject { |_, v| v.nil? }
         else
           @time_partitioning
