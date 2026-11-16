@@ -1,3 +1,4 @@
+require 'zlib'
 require 'fluent/plugin/out_bigquery_base'
 
 module Fluent
@@ -8,6 +9,13 @@ module Fluent
       helpers :timer
 
       config_param :source_format, :enum, list: [:json, :avro, :csv], default: :json
+
+      # compression (only load)
+      #   Compress the data uploaded for a load job. BigQuery detects gzip-compressed input automatically.
+      #   This reduces the bytes sent over the network at the cost of CPU on the fluentd side and
+      #   slower load jobs on the BigQuery side, because BigQuery cannot read a gzip file in parallel.
+      config_param :compression, :enum, list: [:none, :gzip], default: :none
+      config_param :compression_level, :integer, default: Zlib::DEFAULT_COMPRESSION
 
       # max_bad_records (only load)
       #   The maximum number of bad records that BigQuery can ignore when running the job.
@@ -37,6 +45,15 @@ module Fluent
       def configure(conf)
         super
         @is_load = true
+
+        if @compression == :gzip
+          unless @compression_level == Zlib::DEFAULT_COMPRESSION || (Zlib::NO_COMPRESSION..Zlib::BEST_COMPRESSION).cover?(@compression_level)
+            raise Fluent::ConfigError, "compression_level must be between #{Zlib::NO_COMPRESSION} and #{Zlib::BEST_COMPRESSION}, or #{Zlib::DEFAULT_COMPRESSION} for zlib's default"
+          end
+          if @source_format == :avro
+            raise Fluent::ConfigError, "compression gzip is not supported with source_format avro"
+          end
+        end
 
         placeholder_params = "project=#{@project}/dataset=#{@dataset}/table=#{@tablelist.join(",")}/fetch_schema_table=#{@fetch_schema_table}"
         placeholder_validate!(:bigquery_load, placeholder_params)
@@ -198,7 +215,11 @@ module Fluent
         end
       end
 
-      def create_upload_source(chunk)
+      def create_upload_source(chunk, &block)
+        if @compression == :gzip
+          return create_gzip_upload_source(chunk, &block)
+        end
+
         chunk_is_file = @buffer_config["@type"] == 'file'
         if chunk_is_file
           File.open(chunk.path) do |file|
@@ -212,6 +233,29 @@ module Fluent
             file.rewind
             yield file
           end
+        end
+      end
+
+      def create_gzip_upload_source(chunk)
+        Tempfile.create("chunk-gzip-tmp") do |file|
+          file.binmode
+          started_at = Fluent::Clock.now
+          gz = Zlib::GzipWriter.new(file, @compression_level)
+          begin
+            chunk.write_to(gz)
+            raw_size = gz.pos
+          ensure
+            gz.finish
+          end
+          file.flush
+          compressed_size = file.size
+          log.debug("compressed chunk for load job",
+                    chunk: dump_unique_id_hex(chunk.unique_id),
+                    raw_bytes: raw_size,
+                    compressed_bytes: compressed_size,
+                    elapsed: (Fluent::Clock.now - started_at).round(3))
+          file.rewind
+          yield file
         end
       end
     end
