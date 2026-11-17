@@ -169,7 +169,9 @@ module Fluent
         if job_id && e.status_code == 409 && e.message =~ /Job/ # duplicate load job
           # If a load job is duplicated, the API response may not be available to create the result.
           # Therefore, we need to use the location of the table instead of the job's location to determine the result.
-          return JobReference.new(chunk_id, chunk_id_hex, project, dataset, table_id, job_id, table.location)
+          # The table is missing when the duplicated job is the one auto-creating it, so fall back to the dataset location.
+          location = table ? table.location : client.get_dataset(project, dataset).location
+          return JobReference.new(chunk_id, chunk_id_hex, project, dataset, table_id, job_id, location)
         end
 
         raise Fluent::BigQuery::Error.wrap(e)

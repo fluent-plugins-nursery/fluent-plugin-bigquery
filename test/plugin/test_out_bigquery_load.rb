@@ -133,6 +133,49 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
     end
   end
 
+  def test_write_with_prevent_duplicate_load_while_auto_creating_table
+    driver = create_driver(<<-CONFIG)
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      <buffer>
+        @type memory
+      </buffer>
+
+      <inject>
+      time_format %s
+      time_key  time
+      </inject>
+
+      schema_path #{SCHEMA_PATH}
+      auto_create_table true
+      prevent_duplicate_load true
+    CONFIG
+
+    response_stub = stub!
+    stub_writer do |writer|
+      mock(writer.client).get_table('yourproject_id', 'yourdataset_id', 'foo') do
+        raise Google::Apis::ClientError.new("notFound: Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404)
+      end
+      mock(writer.client).insert_job.with_any_args do
+        raise Google::Apis::ClientError.new("duplicate: Already Exists: Job yourproject_id:asia-northeast1.fluentd_job_x", status_code: 409)
+      end
+      mock(writer.client).get_dataset('yourproject_id', 'yourdataset_id') do
+        stub!.location { "asia-northeast1" }
+      end
+
+      mock(writer).fetch_load_job(satisfy { |ref| ref.job_id =~ /\Afluentd_job_/ && ref.location == "asia-northeast1" }) { response_stub }
+      mock(writer).commit_load_job(is_a(String), response_stub)
+    end
+
+    driver.run do
+      driver.feed("tag", Time.now.to_i, {"a" => "b"})
+    end
+  end
+
   def test_write_with_retryable_error
     driver = create_driver
 
