@@ -170,7 +170,7 @@ module Fluent
           # If a load job is duplicated, the API response may not be available to create the result.
           # Therefore, we need to use the location of the table instead of the job's location to determine the result.
           # The table is missing when the duplicated job is the one auto-creating it, so fall back to the dataset location.
-          location = table ? table.location : client.get_dataset(project, dataset).location
+          location = table ? table.location : dataset_location(project, dataset)
           return JobReference.new(chunk_id, chunk_id_hex, project, dataset, table_id, job_id, location)
         end
 
@@ -283,6 +283,13 @@ module Fluent
 
       def get_auth_from_application_default
         Google::Auth.get_application_default([@scope])
+      end
+
+      def dataset_location(project, dataset)
+        client.get_dataset(project, dataset).location
+      rescue Google::Apis::ServerError, Google::Apis::ClientError, Google::Apis::AuthorizationError => e
+        log.error "datasets.get API", project_id: project, dataset: dataset, code: e.status_code, message: e.message
+        raise Fluent::BigQuery::Error.wrap(e)
       end
 
       def safe_table_id(table_id)

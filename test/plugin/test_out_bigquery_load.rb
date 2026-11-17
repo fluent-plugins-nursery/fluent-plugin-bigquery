@@ -327,6 +327,60 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
     driver.instance_shutdown
   end
 
+  def test_write_with_not_retryable_error_from_dataset_location
+    driver = create_driver(<<-CONFIG)
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      <buffer>
+        @type memory
+      </buffer>
+
+      <inject>
+      time_format %s
+      time_key  time
+      </inject>
+
+      schema_path #{SCHEMA_PATH}
+      auto_create_table true
+      prevent_duplicate_load true
+      <secondary>
+        @type file
+        path error
+        utc
+      </secondary>
+    CONFIG
+
+    driver.instance_start
+    tag, time, record = "tag", Time.now.to_i, {"a" => "b"}
+    metadata = Fluent::Plugin::Buffer::Metadata.new(tag, time, record)
+    chunk = driver.instance.buffer.generate_chunk(metadata).tap do |c|
+      c.append([driver.instance.format(tag, time, record)])
+    end
+
+    stub_writer do |writer|
+      mock(writer.client).get_table('yourproject_id', 'yourdataset_id', 'foo') do
+        raise Google::Apis::ClientError.new("notFound: Not found: Table yourproject_id:yourdataset_id.foo", status_code: 404)
+      end
+      mock(writer.client).insert_job.with_any_args do
+        raise Google::Apis::ClientError.new("duplicate: Already Exists: Job yourproject_id:asia-northeast1.fluentd_job_x", status_code: 409)
+      end
+      mock(writer.client).get_dataset('yourproject_id', 'yourdataset_id') do
+        raise Google::Apis::ClientError.new("accessDenied: Access Denied: Dataset yourproject_id:yourdataset_id", status_code: 403)
+      end
+    end
+
+    error = assert_raise Fluent::BigQuery::UnRetryableError do
+      driver.instance.write(chunk)
+    end
+    assert_equal 403, error.status_code
+    assert_in_delta driver.instance.retry.secondary_transition_at , Time.now, 0.1
+    driver.instance_shutdown
+  end
+
   def test_write_with_auto_create_table
     driver = create_driver(<<-CONFIG)
       table foo
