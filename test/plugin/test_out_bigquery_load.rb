@@ -488,6 +488,75 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
     assert_equal({"type" => "DAY", "expirationMs" => "2592000000"}, JSON.parse(json)["configuration"]["load"]["timePartitioning"])
   end
 
+  def test_configure_compression_default
+    driver = create_driver
+    assert_equal :none, driver.instance.compression
+  end
+
+  def test_configure_compression_invalid_level
+    assert_raise(Fluent::ConfigError) do
+      create_driver(CONFIG + "compression gzip\ncompression_level 10\n")
+    end
+  end
+
+  def test_configure_compression_gzip_with_avro
+    assert_raise(Fluent::ConfigError) do
+      create_driver(CONFIG + "compression gzip\nsource_format avro\n")
+    end
+  end
+
+  data(
+    "memory buffer" => "",
+    "memory buffer with compress gzip" => "compress gzip",
+  )
+  def test_write_with_compression_gzip(buffer_option)
+    driver = create_driver(<<-CONFIG)
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      <buffer>
+        @type memory
+        #{buffer_option}
+      </buffer>
+
+      schema_path #{SCHEMA_PATH}
+      wait_job_interval 0.1
+      compression gzip
+    CONFIG
+
+    uploaded = nil
+    response_stub = stub!
+    stub_writer do |writer|
+      mock(writer).fetch_load_job(is_a(Fluent::BigQuery::Writer::JobReference)) { response_stub }
+      mock(writer).commit_load_job(is_a(String), response_stub)
+
+      mock(writer.client).get_table('yourproject_id', 'yourdataset_id', 'foo') { nil }
+
+      mock(writer.client).insert_job('yourproject_id', anything, upload_source: duck_type(:read, :rewind), content_type: "application/octet-stream") do |_, _, options|
+        uploaded = options[:upload_source].read
+        stub!.job_reference.stub! do |s|
+          s.job_id { "dummy_job_id" }
+          s.location { "us" }
+        end
+      end
+    end
+
+    driver.run do
+      driver.feed("tag", Time.now.to_i, {"a" => "b"})
+      driver.feed("tag", Time.now.to_i, {"a" => "c"})
+    end
+
+    # The upload source must be a single gzip stream of newline delimited JSON
+    assert_equal "\x1f\x8b".b, uploaded.byteslice(0, 2)
+    reader = Zlib::GzipReader.new(StringIO.new(uploaded))
+    lines = reader.read.each_line.map { |line| JSON.parse(line) }
+    assert_true reader.unused.nil?
+    assert_equal [{"a" => "b"}, {"a" => "c"}], lines
+  end
+
   private
 
   def create_response_stub(response)
