@@ -105,24 +105,18 @@ module Fluent
         writer.insert_rows(project, dataset, table_id, rows, schema, template_suffix: template_suffix)
       rescue Fluent::BigQuery::Error => e
         raise if e.retryable?
+        # Without a <secondary>, give up only this chunk. A retry state with
+        # max_steps: 0 would make Fluentd drop every chunk in the queue.
+        raise Fluent::UnrecoverableError, e.message unless @secondary
 
-        if @secondary
-          # TODO: find better way
-          @retry = retry_state_create(
-            :output_retries, @buffer_config.retry_type, @buffer_config.retry_wait, @buffer_config.retry_timeout,
-            forever: false, max_steps: @buffer_config.retry_max_times, backoff_base: @buffer_config.retry_exponential_backoff_base,
-            max_interval: @buffer_config.retry_max_interval,
-            secondary: true, secondary_threshold: Float::EPSILON,
-            randomize: @buffer_config.retry_randomize
-          )
-        else
-          @retry = retry_state_create(
-            :output_retries, @buffer_config.retry_type, @buffer_config.retry_wait, @buffer_config.retry_timeout,
-            forever: false, max_steps: 0, backoff_base: @buffer_config.retry_exponential_backoff_base,
-            max_interval: @buffer_config.retry_max_interval,
-            randomize: @buffer_config.retry_randomize
-          )
-        end
+        # TODO: find better way
+        @retry = retry_state_create(
+          :output_retries, @buffer_config.retry_type, @buffer_config.retry_wait, @buffer_config.retry_timeout,
+          forever: false, max_steps: @buffer_config.retry_max_times, backoff_base: @buffer_config.retry_exponential_backoff_base,
+          max_interval: @buffer_config.retry_max_interval,
+          secondary: true, secondary_threshold: Float::EPSILON,
+          randomize: @buffer_config.retry_randomize
+        )
 
         raise
       end
