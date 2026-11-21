@@ -575,4 +575,43 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
       end
     end
   end
+
+  def test_write_with_not_retryable_error_keeps_other_chunks
+    driver = create_driver(<<-CONFIG)
+      table foo_${tag}
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      <buffer tag>
+        @type memory
+        disable_chunk_backup true
+      </buffer>
+
+      schema [{"name": "a", "type": "STRING"}]
+    CONFIG
+
+    driver.instance_start
+    time = Time.now.to_i
+    driver.instance.buffer.write({
+      Fluent::Plugin::Buffer::Metadata.new(nil, "bad", nil) => [driver.instance.format("bad", time, {"a" => "b"})],
+      Fluent::Plugin::Buffer::Metadata.new(nil, "good", nil) => [driver.instance.format("good", time, {"a" => "b"})],
+    }, enqueue: true)
+
+    inserted_tables = []
+    stub(driver.instance.writer).insert_rows do |project, dataset, table_id, rows, schema, template_suffix:|
+      raise Fluent::BigQuery::UnRetryableError.new("invalid: no such field") if table_id == "foo_bad"
+      inserted_tables << table_id
+    end
+
+    driver.instance.try_flush
+    driver.instance.try_flush
+
+    assert_equal ["foo_good"], inserted_tables
+    assert_equal 0, driver.instance.buffer.queue.size
+    assert_nil driver.instance.retry
+    assert_false driver.logs.any? { |log| log.include?("Hit limit for retries") }
+    driver.instance_shutdown
+  end
 end
