@@ -48,6 +48,8 @@ module Fluent
         if prefer_delayed_commit
           @polling_targets = []
           @polling_mutex = Mutex.new
+          @unrecoverable_chunk_ids = Set.new
+          @unrecoverable_chunk_ids_mutex = Mutex.new
           log.debug("start load job polling")
           timer_execute(:polling_bigquery_load_job, @wait_job_interval, &method(:poll))
         end
@@ -72,56 +74,48 @@ module Fluent
         writer.commit_load_job(job_reference.chunk_id_hex, response)
       rescue Fluent::BigQuery::Error => e
         raise if e.retryable?
+        # Without a <secondary>, give up only this chunk. A retry state with
+        # max_steps: 0 would make Fluentd drop every chunk in the queue.
+        raise Fluent::UnrecoverableError, e.message unless @secondary
 
         @retry_mutex.synchronize do
-          if @secondary
-            # TODO: find better way
-            @retry = retry_state_create(
-              :output_retries, @buffer_config.retry_type, @buffer_config.retry_wait, @buffer_config.retry_timeout,
-              forever: false, max_steps: @buffer_config.retry_max_times, backoff_base: @buffer_config.retry_exponential_backoff_base,
-              max_interval: @buffer_config.retry_max_interval,
-              secondary: true, secondary_threshold: Float::EPSILON,
-              randomize: @buffer_config.retry_randomize
-            )
-          else
-            @retry = retry_state_create(
-              :output_retries, @buffer_config.retry_type, @buffer_config.retry_wait, @buffer_config.retry_timeout,
-              forever: false, max_steps: 0, backoff_base: @buffer_config.retry_exponential_backoff_base,
-              max_interval: @buffer_config.retry_max_interval,
-              randomize: @buffer_config.retry_randomize
-            )
-          end
+          # TODO: find better way
+          @retry = retry_state_create(
+            :output_retries, @buffer_config.retry_type, @buffer_config.retry_wait, @buffer_config.retry_timeout,
+            forever: false, max_steps: @buffer_config.retry_max_times, backoff_base: @buffer_config.retry_exponential_backoff_base,
+            max_interval: @buffer_config.retry_max_interval,
+            secondary: true, secondary_threshold: Float::EPSILON,
+            randomize: @buffer_config.retry_randomize
+          )
         end
 
         raise
       end
 
       def try_write(chunk)
+        if @unrecoverable_chunk_ids_mutex.synchronize { @unrecoverable_chunk_ids.delete?(chunk.unique_id) }
+          raise Fluent::UnrecoverableError, "load job for chunk #{dump_unique_id_hex(chunk.unique_id)} failed with a non-retryable error"
+        end
+
         job_reference = do_write(chunk)
         @polling_mutex.synchronize do
           @polling_targets << job_reference
         end
       rescue Fluent::BigQuery::Error => e
         raise if e.retryable?
+        # Without a <secondary>, give up only this chunk. A retry state with
+        # max_steps: 0 would make Fluentd drop every chunk in the queue.
+        raise Fluent::UnrecoverableError, e.message unless @secondary
 
         @retry_mutex.synchronize do
-          if @secondary
-            # TODO: find better way
-            @retry = retry_state_create(
-              :output_retries, @buffer_config.retry_type, @buffer_config.retry_wait, @buffer_config.retry_timeout,
-              forever: false, max_steps: @buffer_config.retry_max_times, backoff_base: @buffer_config.retry_exponential_backoff_base,
-              max_interval: @buffer_config.retry_max_interval,
-              secondary: true, secondary_threshold: Float::EPSILON,
-              randomize: @buffer_config.retry_randomize
-            )
-          else
-            @retry = retry_state_create(
-              :output_retries, @buffer_config.retry_type, @buffer_config.retry_wait, @buffer_config.retry_timeout,
-              forever: false, max_steps: 0, backoff_base: @buffer_config.retry_exponential_backoff_base,
-              max_interval: @buffer_config.retry_max_interval,
-              randomize: @buffer_config.retry_randomize
-            )
-          end
+          # TODO: find better way
+          @retry = retry_state_create(
+            :output_retries, @buffer_config.retry_type, @buffer_config.retry_wait, @buffer_config.retry_timeout,
+            forever: false, max_steps: @buffer_config.retry_max_times, backoff_base: @buffer_config.retry_exponential_backoff_base,
+            max_interval: @buffer_config.retry_max_interval,
+            secondary: true, secondary_threshold: Float::EPSILON,
+            randomize: @buffer_config.retry_randomize
+          )
         end
 
         raise
@@ -167,13 +161,13 @@ module Fluent
         rescue Fluent::BigQuery::Error => e
           # RetryableError comes from only `commit_load_job`
           # if error is retryable, takeback chunk and do next `try_flush`
-          # if error is not retryable, create custom retry_state and takeback chunk do next `try_flush`
+          # if error is not retryable, takeback chunk and give it up (or send it to <secondary>) on next `try_flush`
           if e.retryable?
             log.warn("failed to poll load job", error: e, chunk: job_reference.chunk_id_hex, **job_reference.as_hash(:job_id, :project_id, :dataset_id, :table_id))
           else
             log.error("failed to poll load job", error: e, chunk: job_reference.chunk_id_hex, **job_reference.as_hash(:job_id, :project_id, :dataset_id, :table_id))
-            @retry_mutex.synchronize do
-              if @secondary
+            if @secondary
+              @retry_mutex.synchronize do
                 # TODO: find better way
                 @retry = retry_state_create(
                   :output_retries, @buffer_config.retry_type, @buffer_config.retry_wait, @buffer_config.retry_timeout,
@@ -182,13 +176,11 @@ module Fluent
                   secondary: true, secondary_threshold: Float::EPSILON,
                   randomize: @buffer_config.retry_randomize
                 )
-              else
-                @retry = retry_state_create(
-                  :output_retries, @buffer_config.retry_type, @buffer_config.retry_wait, @buffer_config.retry_timeout,
-                  forever: false, max_steps: 0, backoff_base: @buffer_config.retry_exponential_backoff_base,
-                  max_interval: @buffer_config.retry_max_interval,
-                  randomize: @buffer_config.retry_randomize
-                )
+              end
+            else
+              # try_write raises Fluent::UnrecoverableError for this chunk on the next flush
+              @unrecoverable_chunk_ids_mutex.synchronize do
+                @unrecoverable_chunk_ids << job_reference.chunk_id
               end
             end
           end
