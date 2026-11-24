@@ -182,6 +182,11 @@ module Fluent
               @unrecoverable_chunk_ids_mutex.synchronize do
                 @unrecoverable_chunk_ids << job_reference.chunk_id
               end
+              # The chunk is given up on its next try_write, so this rollback
+              # does not count as a retry. A retry state here could clear the
+              # other chunks in the queue.
+              rollback_write(job_reference.chunk_id, update_retry: false)
+              return
             end
           end
 
