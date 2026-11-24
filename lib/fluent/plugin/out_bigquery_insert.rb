@@ -105,6 +105,10 @@ module Fluent
         writer.insert_rows(project, dataset, table_id, rows, schema, template_suffix: template_suffix)
       rescue Fluent::BigQuery::Error => e
         raise if e.retryable?
+
+        # As the <secondary> of another output, leave the retry to the primary.
+        raise if as_secondary
+
         # Without a <secondary>, give up only this chunk. A retry state with
         # max_steps: 0 would make Fluentd drop every chunk in the queue.
         raise Fluent::UnrecoverableError, e.message unless @secondary
