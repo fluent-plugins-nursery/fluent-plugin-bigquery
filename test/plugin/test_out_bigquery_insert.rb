@@ -575,4 +575,100 @@ class BigQueryInsertOutputTest < Test::Unit::TestCase
       end
     end
   end
+
+  def test_write_with_not_retryable_error_keeps_other_chunks
+    driver = create_driver(<<-CONFIG)
+      table foo_${tag}
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      <buffer tag>
+        @type memory
+        flush_thread_count 0
+        disable_chunk_backup true
+      </buffer>
+
+      schema [{"name": "a", "type": "STRING"}]
+    CONFIG
+
+    driver.instance_start
+    time = Time.now.to_i
+    driver.instance.buffer.write({
+      Fluent::Plugin::Buffer::Metadata.new(nil, "bad", nil) => [driver.instance.format("bad", time, {"a" => "b"})],
+      Fluent::Plugin::Buffer::Metadata.new(nil, "good", nil) => [driver.instance.format("good", time, {"a" => "b"})],
+    }, enqueue: true)
+
+    inserted_tables = []
+    stub(driver.instance.writer).insert_rows do |project, dataset, table_id, rows, schema, template_suffix:|
+      raise Fluent::BigQuery::UnRetryableError.new("invalid: no such field") if table_id == "foo_bad"
+      inserted_tables << table_id
+    end
+
+    driver.instance.try_flush
+    driver.instance.try_flush
+
+    assert_equal ["foo_good"], inserted_tables
+    assert_equal 0, driver.instance.buffer.queue.size
+    assert_nil driver.instance.retry
+    assert_false driver.logs.any? { |log| log.include?("Hit limit for retries") }
+    driver.instance_shutdown
+  end
+
+  def test_write_with_not_retryable_error_as_secondary
+    driver = create_driver(<<-CONFIG)
+      table foo
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+
+      <buffer>
+        @type memory
+        flush_thread_count 0
+      </buffer>
+
+      schema [{"name": "a", "type": "STRING"}]
+
+      <secondary>
+        @type bigquery_insert
+        table bar
+        email foo@bar.example
+        private_key_path /path/to/key
+        project yourproject_id
+        dataset yourdataset_id
+        schema [{"name": "a", "type": "STRING"}]
+      </secondary>
+    CONFIG
+
+    primary_calls = 0
+    secondary_calls = 0
+    stub(driver.instance.writer).insert_rows do |*|
+      primary_calls += 1
+      raise Fluent::BigQuery::UnRetryableError.new("invalid: no such field")
+    end
+    stub(driver.instance.secondary.writer).insert_rows do |*|
+      secondary_calls += 1
+      raise Fluent::BigQuery::UnRetryableError.new("invalid: no such field")
+    end
+
+    driver.instance_start
+    driver.instance.buffer.write({
+      Fluent::Plugin::Buffer::Metadata.new(nil, nil, nil) => [driver.instance.format("tag", Time.now.to_i, {"a" => "b"})],
+    }, enqueue: true)
+
+    3.times do
+      begin
+        driver.instance.try_flush
+      rescue Fluent::BigQuery::UnRetryableError
+      end
+    end
+
+    assert_equal 1, primary_calls
+    assert_equal 2, secondary_calls
+    assert_equal 1, driver.instance.buffer.queue.size
+  ensure
+    driver&.instance_shutdown
+  end
 end
