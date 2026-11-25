@@ -488,6 +488,136 @@ class BigQueryLoadOutputTest < Test::Unit::TestCase
     assert_equal({"type" => "DAY", "expirationMs" => "2592000000"}, JSON.parse(json)["configuration"]["load"]["timePartitioning"])
   end
 
+  def unretryable_error_queue_driver(use_delayed_commit:, retry_max_times: nil)
+    driver = create_driver(<<-CONFIG)
+      table foo_${tag}
+      email foo@bar.example
+      private_key_path /path/to/key
+      project yourproject_id
+      dataset yourdataset_id
+      use_delayed_commit #{use_delayed_commit}
+      wait_job_interval 3600
+
+      <buffer tag>
+        @type memory
+        disable_chunk_backup true
+        #{"retry_max_times #{retry_max_times}" if retry_max_times}
+      </buffer>
+
+      <inject>
+      time_format %s
+      time_key  time
+      </inject>
+
+      schema_path #{SCHEMA_PATH}
+    CONFIG
+
+    driver.instance_start
+    time = Time.now.to_i
+    driver.instance.buffer.write({
+      Fluent::Plugin::Buffer::Metadata.new(nil, "bad", nil) => [driver.instance.format("bad", time, {"a" => "b"})],
+      Fluent::Plugin::Buffer::Metadata.new(nil, "good", nil) => [driver.instance.format("good", time, {"a" => "b"})],
+    }, enqueue: true)
+    assert_equal 2, driver.instance.buffer.queue.size
+    driver
+  end
+
+  # Returns the tables passed to commit_load_job.
+  def stub_load_jobs(writer, loaded_tables, fail_in: :create)
+    committed_tables = []
+    stub(writer).create_load_job do |chunk_id, chunk_id_hex, project, dataset, table_id, upload_source, schema|
+      if table_id == "foo_bad" && fail_in == :create
+        raise Fluent::BigQuery::UnRetryableError.new("invalid: Provided Schema does not match Table")
+      end
+      Fluent::BigQuery::Writer::JobReference.new(chunk_id, chunk_id_hex, project, dataset, table_id, "job_#{table_id}", "us")
+    end
+    stub(writer).fetch_load_job { |job_reference| job_reference }
+    stub(writer).commit_load_job do |chunk_id_hex, job_reference|
+      committed_tables << job_reference.table_id
+      raise Fluent::BigQuery::UnRetryableError.new("failed to load into bigquery, and cannot retry") if job_reference.table_id == "foo_bad"
+      loaded_tables << job_reference.table_id
+    end
+    committed_tables
+  end
+
+  def test_write_with_not_retryable_error_keeps_other_chunks
+    driver = unretryable_error_queue_driver(use_delayed_commit: false)
+    loaded_tables = []
+    stub_load_jobs(driver.instance.writer, loaded_tables)
+
+    driver.instance.try_flush
+    driver.instance.try_flush
+
+    assert_equal ["foo_good"], loaded_tables
+    assert_equal 0, driver.instance.buffer.queue.size
+    assert_nil driver.instance.retry
+    assert_false driver.logs.any? { |log| log.include?("Hit limit for retries") }
+  ensure
+    driver&.instance_shutdown
+  end
+
+  def test_try_write_with_not_retryable_error_keeps_other_chunks
+    driver = unretryable_error_queue_driver(use_delayed_commit: true)
+    loaded_tables = []
+    stub_load_jobs(driver.instance.writer, loaded_tables)
+
+    driver.instance.try_flush
+    driver.instance.try_flush
+    driver.instance.send(:poll)
+
+    assert_equal ["foo_good"], loaded_tables
+    assert_equal 0, driver.instance.buffer.queue.size
+    assert_equal 0, driver.instance.buffer.dequeued.size
+    assert_nil driver.instance.retry
+    assert_false driver.logs.any? { |log| log.include?("Hit limit for retries") }
+  ensure
+    driver&.instance_shutdown
+  end
+
+  def test_poll_with_not_retryable_error_keeps_other_chunks
+    driver = unretryable_error_queue_driver(use_delayed_commit: true)
+    loaded_tables = []
+    committed_tables = stub_load_jobs(driver.instance.writer, loaded_tables, fail_in: :commit)
+
+    driver.instance.try_flush
+    driver.instance.send(:poll)
+    driver.instance.try_flush
+    driver.instance.try_flush
+    driver.instance.send(:poll)
+
+    assert_equal ["foo_good"], loaded_tables
+    assert_include committed_tables, "foo_bad"
+    assert_equal 0, driver.instance.buffer.queue.size
+    assert_equal 0, driver.instance.buffer.dequeued.size
+    assert_false driver.logs.any? { |log| log.include?("Hit limit for retries") }
+  ensure
+    driver&.instance_shutdown
+  end
+
+  def test_poll_with_not_retryable_error_does_not_update_retry
+    driver = unretryable_error_queue_driver(use_delayed_commit: true, retry_max_times: 0)
+    loaded_tables = []
+    committed_tables = stub_load_jobs(driver.instance.writer, loaded_tables, fail_in: :commit)
+
+    driver.instance.try_flush
+    driver.instance.send(:poll)
+
+    assert_equal ["foo_bad"], committed_tables
+    assert_include driver.instance.buffer.queue.map { |chunk| chunk.metadata.tag }, "good"
+    assert_nil driver.instance.retry
+
+    driver.instance.try_flush
+    driver.instance.try_flush
+    driver.instance.send(:poll)
+
+    assert_equal ["foo_good"], loaded_tables
+    assert_equal 0, driver.instance.buffer.queue.size
+    assert_equal 0, driver.instance.buffer.dequeued.size
+    assert_false driver.logs.any? { |log| log.include?("Hit limit for retries") }
+  ensure
+    driver&.instance_shutdown
+  end
+
   private
 
   def create_response_stub(response)
