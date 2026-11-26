@@ -81,6 +81,8 @@ Because embedded gem dependency sometimes restricts ruby environment.
 | :------------------------------------- | :------------ | :----------- | :----------  | :------------------------- | :-----------------------                                                                                                                       |
 | source_format                          | enum          | no           | no           | json                       | Specify source format `json` or `csv` or `avro`. If you change this parameter, you must change formatter plugin via `<format>` config section. |
 | max_bad_records                        | integer       | no           | no           | 0                          | If the number of bad records exceeds this value, an invalid error is returned in the job result.                                               |
+| compression                            | enum          | no           | no           | none                       | Compress the data uploaded for a load job. `none` or `gzip`. `gzip` reduces network egress, but load jobs may take longer because BigQuery cannot read gzip-compressed files in parallel. Not supported with `source_format avro`. |
+| compression_level                      | integer       | no           | no           | -1                         | zlib compression level (0-9) used when `compression gzip`. `-1` uses zlib's default (equivalent to 6). |
 
 ### Buffer section
 
